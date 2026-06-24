@@ -1,9 +1,10 @@
 # Backend
 backend/venv/
-backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
 backend/.env
 backend/*.pyc
-backend/alembic/versions/
+backend/__pycache__/
 
 # Frontend
 frontend/node_modules/
@@ -13,3 +14,4 @@ frontend/.env.local
 # General
 .DS_Store
 *.log
+.env
