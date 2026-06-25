@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://forex-intel-othmannchulas-projects.vercel.app",
     ]
-
     # Supported forex pairs
     SUPPORTED_PAIRS: List[str] = [
         "EUR/USD",
