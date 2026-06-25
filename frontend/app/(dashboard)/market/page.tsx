@@ -74,7 +74,7 @@ export default function MarketPage() {
     }
   }
 
-async function initChart(chartData: any[]) {
+  async function initChart(chartData: any[]) {
     if (!chartContainerRef.current || !chartData.length) return;
 
     const {
@@ -107,12 +107,11 @@ async function initChart(chartData: any[]) {
         secondsVisible: false,
       },
       width: chartContainerRef.current.clientWidth,
-      height: 400,
+      height: 450,
     });
 
     chartRef.current = chart;
 
-    // Candlestick series
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: "#10b981",
       downColor: "#ef4444",
@@ -132,7 +131,6 @@ async function initChart(chartData: any[]) {
       }))
     );
 
-    // EMA 20
     const ema20Series = chart.addSeries(LineSeries, {
       color: "#3b82f6",
       lineWidth: 1,
@@ -142,7 +140,6 @@ async function initChart(chartData: any[]) {
       chartData.map((d) => ({ time: d.time, value: d.ema20 }))
     );
 
-    // EMA 50
     const ema50Series = chart.addSeries(LineSeries, {
       color: "#f59e0b",
       lineWidth: 1,
@@ -152,7 +149,6 @@ async function initChart(chartData: any[]) {
       chartData.map((d) => ({ time: d.time, value: d.ema50 }))
     );
 
-    // Signal levels
     if (signal && signal.direction !== "NO_TRADE") {
       if (signal.stop_loss) {
         const slSeries = chart.addSeries(LineSeries, {
@@ -195,21 +191,19 @@ async function initChart(chartData: any[]) {
   const rsiLabel = indicators ? getRSILabel(indicators.rsi) : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pt-2">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
           <TrendingUp className="h-6 w-6 text-blue-400" />
           Market Chart
         </h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={loadMarketData}
-            className="text-gray-400 hover:text-white transition-colors p-2"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
+        <button
+          onClick={loadMarketData}
+          className="text-gray-400 hover:text-white transition-colors p-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+        </button>
       </div>
 
       {/* Controls */}
@@ -262,7 +256,7 @@ async function initChart(chartData: any[]) {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-4 text-xs">
+          <div className="flex items-center gap-4 text-xs text-gray-400">
             <span className="flex items-center gap-1">
               <span className="w-3 h-0.5 bg-blue-400 inline-block" />
               EMA20
@@ -296,7 +290,6 @@ async function initChart(chartData: any[]) {
 
       {/* Indicators + Signal row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Indicators panel */}
         {indicators && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <h2 className="text-white font-semibold mb-4">
@@ -321,13 +314,17 @@ async function initChart(chartData: any[]) {
               </div>
               <div className="bg-gray-800 rounded-lg p-3">
                 <p className="text-gray-400 text-xs mb-1">MACD Hist</p>
-                <p className={`font-bold font-mono text-sm ${indicators.macd_hist > 0 ? "text-green-400" : "text-red-400"}`}>
+                <p className={`font-bold font-mono text-sm ${
+                  indicators.macd_hist > 0 ? "text-green-400" : "text-red-400"
+                }`}>
                   {indicators.macd_hist.toFixed(5)}
                 </p>
               </div>
               <div className="bg-gray-800 rounded-lg p-3">
                 <p className="text-gray-400 text-xs mb-1">EMA Cross</p>
-                <p className={`font-bold ${indicators.ema_cross === "ABOVE" ? "text-green-400" : "text-red-400"}`}>
+                <p className={`font-bold ${
+                  indicators.ema_cross === "ABOVE" ? "text-green-400" : "text-red-400"
+                }`}>
                   EMA20 {indicators.ema_cross} EMA50
                 </p>
               </div>
@@ -357,15 +354,12 @@ async function initChart(chartData: any[]) {
           </div>
         )}
 
-        {/* Signal panel */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <h2 className="text-white font-semibold mb-4">Latest AI Signal</h2>
           {signal ? (
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <span
-                  className={`font-bold px-3 py-1.5 rounded-lg border text-sm ${getDirectionBg(signal.direction)}`}
-                >
+                <span className={`font-bold px-3 py-1.5 rounded-lg border text-sm ${getDirectionBg(signal.direction)}`}>
                   {signal.direction}
                 </span>
                 <span className="text-gray-400 text-sm">
@@ -375,7 +369,6 @@ async function initChart(chartData: any[]) {
                   </span>
                 </span>
               </div>
-
               {signal.direction !== "NO_TRADE" && (
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="bg-gray-800 rounded-lg p-2">
@@ -404,7 +397,6 @@ async function initChart(chartData: any[]) {
                   </div>
                 </div>
               )}
-
               {signal.ai_explanation && (
                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
                   <p className="text-blue-400 text-xs font-semibold mb-1">
@@ -418,7 +410,9 @@ async function initChart(chartData: any[]) {
             </div>
           ) : (
             <div className="text-center py-8">
-              <p className="text-gray-500 text-sm">No signal for {activePair} yet.</p>
+              <p className="text-gray-500 text-sm">
+                No signal for {activePair} yet.
+              </p>
               <button
                 onClick={generateSignal}
                 disabled={generating}

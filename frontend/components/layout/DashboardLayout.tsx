@@ -22,8 +22,8 @@ export default function DashboardLayout({
       <PriceFeed />
       <Sidebar />
       <Header />
-      <main className="ml-16 md:ml-56 pt-14 min-h-screen">
-        <div className="p-4 space-y-4">
+      <main className="ml-0 md:ml-56 pt-28 md:pt-14 min-h-screen">
+        <div className="p-3 md:p-4 space-y-4">
           <DisclaimerBanner />
           {children}
         </div>
