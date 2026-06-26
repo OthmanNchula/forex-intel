@@ -87,6 +87,21 @@ export default function SignalsPage() {
         </button>
       </div>
 
+            {/* Auto Signal Engine Status */}
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <span className="text-green-400 text-sm font-medium">Auto Signal Engine Active</span>
+          </div>
+          <span className="text-gray-400 text-xs">Scanning 6 pairs every 15 minutes</span>
+        </div>
+        <p className="text-gray-400 text-xs mt-2">
+          Signals appear automatically when confidence ≥ 70% and R:R ≥ 1.5 on H1 or H4 timeframes.
+          You can also generate signals manually using the form above.
+        </p>
+      </div>
+
       {/* Signal Generator */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
         <h2 className="text-white font-semibold mb-4">Generate New Signal</h2>
