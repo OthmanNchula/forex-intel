@@ -9,17 +9,12 @@ from app.routers import auth, market, analysis, risk, journal, alerts
 from app.websocket.price_feed import handle_price_websocket, price_broadcast_loop
 
 
-# Create all database tables on startup
 def create_tables():
     Base.metadata.create_all(bind=engine)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Runs on startup and shutdown.
-    Creates DB tables and starts the price broadcast background task.
-    """
     # Startup
     print("Starting Forex Intel API...")
     create_tables()
@@ -29,14 +24,24 @@ async def lifespan(app: FastAPI):
     broadcast_task = asyncio.create_task(price_broadcast_loop())
     print("Price broadcast loop started.")
 
+    # Start auto signal engine
+    try:
+        from app.services.auto_signal_engine import auto_signal_loop
+        signal_task = asyncio.create_task(auto_signal_loop())
+        print("Auto Signal Engine started.")
+    except Exception as e:
+        signal_task = None
+        print(f"Auto Signal Engine failed to start: {e}")
+
     yield
 
     # Shutdown
     broadcast_task.cancel()
+    if signal_task:
+        signal_task.cancel()
     print("Forex Intel API shutting down.")
 
 
-# Create FastAPI app
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
@@ -44,7 +49,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow frontend to call the API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -53,7 +57,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register all routers
 app.include_router(auth.router)
 app.include_router(market.router)
 app.include_router(analysis.router)
@@ -62,13 +65,11 @@ app.include_router(journal.router)
 app.include_router(alerts.router)
 
 
-# WebSocket endpoint
 @app.websocket("/ws/prices")
 async def websocket_prices(websocket: WebSocket):
     await handle_price_websocket(websocket)
 
 
-# Health check
 @app.get("/")
 def root():
     return {
