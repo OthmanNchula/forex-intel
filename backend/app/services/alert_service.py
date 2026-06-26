@@ -4,9 +4,13 @@ from typing import Optional
 from upstash_redis import Redis
 from app.config import settings
 
-# Initialize Upstash Redis client
+# Ensure URL has https:// prefix
+redis_url = settings.UPSTASH_REDIS_REST_URL
+if redis_url and not redis_url.startswith("https://"):
+    redis_url = f"https://{redis_url}"
+
 redis = Redis(
-    url=settings.UPSTASH_REDIS_REST_URL,
+    url=redis_url,
     token=settings.UPSTASH_REDIS_REST_TOKEN,
 )
 
