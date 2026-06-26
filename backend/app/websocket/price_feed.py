@@ -83,11 +83,11 @@ async def price_broadcast_loop():
                         cache_price(pair, price)
                         # Broadcast to subscribed clients
                         await manager.broadcast_price(pair, price)
-                        await asyncio.sleep(0.5)  # small delay between pairs
+                        await asyncio.sleep(2)  # small delay between pairs
         except Exception as e:
             print(f"Price broadcast error: {e}")
 
-        await asyncio.sleep(10)  # fetch every 10 seconds
+        await asyncio.sleep(30)  # fetch every 10 seconds
 
 
 async def handle_price_websocket(websocket: WebSocket):
