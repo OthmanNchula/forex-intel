@@ -276,21 +276,66 @@ async def expire_old_signals():
         db.close()
 
 
+def is_market_open() -> bool:
+    """
+    Check if Forex market is active.
+    Forex market hours in UTC:
+    - Sunday 22:00 UTC — Friday 22:00 UTC (market is open)
+    - Best liquidity: London (07:00-16:00 UTC) + New York (12:00-21:00 UTC)
+    - We scan during high liquidity sessions only to save API credits
+    """
+    now = datetime.now(timezone.utc)
+    weekday = now.weekday()  # 0=Monday, 6=Sunday
+    hour = now.hour
+
+    # Skip Saturday entirely (weekday 5)
+    if weekday == 5:
+        return False
+
+    # Skip Sunday before 22:00 UTC (market opens Sunday 22:00)
+    if weekday == 6 and hour < 22:
+        return False
+
+    # Skip Friday after 22:00 UTC (market closes Friday 22:00)
+    if weekday == 4 and hour >= 22:
+        return False
+
+    # Only scan during high liquidity hours (UTC):
+    # London session: 07:00 - 16:00 UTC
+    # New York session: 12:00 - 21:00 UTC
+    # Combined active window: 07:00 - 21:00 UTC
+    # In EAT (UTC+3): 10:00 - 00:00 midnight
+    if hour < 7 or hour >= 21:
+        return False
+
+    return True
+
+
 async def auto_signal_loop():
     """
-    Main background loop — runs every 15 minutes.
+    Main background loop — runs every 15 minutes during market hours.
     Scans all pairs and timeframes for high-probability setups.
+    Skips scanning outside London/New York sessions to save API credits.
     """
     print("[AutoSignal] 🚀 Auto Signal Engine started")
     print(f"[AutoSignal] Scanning {len(SCAN_PAIRS)} pairs on {len(SCAN_TIMEFRAMES)} timeframes every {SCAN_INTERVAL//60} minutes")
     print(f"[AutoSignal] Minimum confidence: {MIN_CONFIDENCE}% | Minimum R:R: {MIN_RR_RATIO}")
+    print("[AutoSignal] Active hours: London + New York sessions (07:00-21:00 UTC / 10:00-00:00 EAT)")
 
-    # Wait 30 seconds on startup to let everything initialize
+    # Wait 30 seconds on startup
     await asyncio.sleep(30)
 
     while True:
         try:
-            print(f"\n[AutoSignal] 🔍 Starting scan at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+            now = datetime.now(timezone.utc)
+
+            if not is_market_open():
+                next_check = 30  # check again in 30 minutes
+                print(f"[AutoSignal] 😴 Market closed or low liquidity at {now.strftime('%H:%M UTC')} — sleeping {next_check} mins")
+                await asyncio.sleep(next_check * 60)
+                continue
+
+            print(f"\n[AutoSignal] 🔍 Starting scan at {now.strftime('%Y-%m-%d %H:%M UTC')}")
 
             # Expire old signals first
             await expire_old_signals()
@@ -300,9 +345,7 @@ async def auto_signal_loop():
             # Scan each pair and timeframe
             for pair in SCAN_PAIRS:
                 for timeframe in SCAN_TIMEFRAMES:
-                    # Add delay between API calls to respect rate limits
-                    await asyncio.sleep(3)
-
+                    await asyncio.sleep(8)  # delay between calls
                     result = await analyze_pair(pair, timeframe)
                     if result:
                         saved = await save_auto_signal(result)
@@ -314,6 +357,5 @@ async def auto_signal_loop():
         except Exception as e:
             print(f"[AutoSignal] Loop error: {e}")
 
-        # Wait 15 minutes before next scan
         print(f"[AutoSignal] 💤 Next scan in {SCAN_INTERVAL//60} minutes")
         await asyncio.sleep(SCAN_INTERVAL)
