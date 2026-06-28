@@ -19,12 +19,12 @@ SCAN_PAIRS = [
     "USD/CAD",
 ]
 
-SCAN_TIMEFRAMES = ["H1", "H4"]
+SCAN_TIMEFRAMES = ["M15", "H1", "H4"]
 
 # Minimum thresholds for auto signal generation
-MIN_CONFIDENCE = 70        # minimum AI confidence score
-MIN_RR_RATIO = 1.5         # minimum risk to reward ratio
-SCAN_INTERVAL = 900        # scan every 15 minutes (900 seconds)
+MIN_CONFIDENCE = 55        # minimum AI confidence score
+MIN_RR_RATIO = 1.2         # minimum risk to reward ratio
+SCAN_INTERVAL = 300        # scan every 15 minutes (900 seconds)
 
 
 def check_technical_confluence(indicators: dict, direction: str) -> tuple[bool, str]:
