@@ -19,19 +19,101 @@ SCAN_PAIRS = [
     "USD/CAD",
 ]
 
-SCAN_TIMEFRAMES = ["M15", "H1", "H4"]
+SCAN_TIMEFRAMES = ["H1", "H4"]
 
-# Minimum thresholds for auto signal generation
-MIN_CONFIDENCE = 55        # minimum AI confidence score
-MIN_RR_RATIO = 1.2         # minimum risk to reward ratio
-SCAN_INTERVAL = 300        # scan every 15 minutes (900 seconds)
+# Minimum thresholds
+MIN_CONFIDENCE = 70
+MIN_RR_RATIO = 1.5
+SCAN_INTERVAL = 3600  # 1 hour default
+
+# Key market session opens in UTC
+# These are the highest liquidity moments — best for signals
+SESSION_OPENS = [
+    {"name": "Tokyo Open", "hour": 0, "minute": 0},
+    {"name": "London Open", "hour": 7, "minute": 0},
+    {"name": "New York Open", "hour": 12, "minute": 0},
+    {"name": "London/NY Overlap", "hour": 13, "minute": 0},
+    {"name": "London Close", "hour": 16, "minute": 0},
+    {"name": "NY Close", "hour": 21, "minute": 0},
+]
+
+# High impact pairs per session
+SESSION_PAIRS = {
+    "Tokyo Open": ["USD/JPY", "AUD/USD"],
+    "London Open": ["EUR/USD", "GBP/USD", "XAU/USD"],
+    "New York Open": ["EUR/USD", "GBP/USD", "USD/CAD", "XAU/USD"],
+    "London/NY Overlap": ["EUR/USD", "GBP/USD", "XAU/USD", "USD/JPY"],
+    "London Close": ["EUR/USD", "GBP/USD"],
+    "NY Close": ["XAU/USD", "USD/JPY"],
+}
+
+
+def is_market_open() -> bool:
+    """Check if Forex market is active."""
+    now = datetime.now(timezone.utc)
+    weekday = now.weekday()
+    hour = now.hour
+
+    # Skip Saturday
+    if weekday == 5:
+        return False
+    # Skip Sunday before 22:00
+    if weekday == 6 and hour < 22:
+        return False
+    # Skip Friday after 22:00
+    if weekday == 4 and hour >= 22:
+        return False
+
+    return True
+
+
+def get_active_session(now: datetime) -> Optional[dict]:
+    """
+    Check if current time is within 30 minutes of a session open.
+    Returns session info if active, None otherwise.
+    This is the smart trigger — only scan near session opens.
+    """
+    hour = now.hour
+    minute = now.minute
+
+    for session in SESSION_OPENS:
+        session_hour = session["hour"]
+        session_minute = session["minute"]
+
+        # Calculate minutes difference
+        current_total = hour * 60 + minute
+        session_total = session_hour * 60 + session_minute
+
+        diff = abs(current_total - session_total)
+
+        # Trigger within 30 minutes of session open
+        if diff <= 30:
+            return session
+
+    return None
+
+
+def get_pairs_for_session(session_name: str) -> list:
+    """Get the most relevant pairs for a given session."""
+    return SESSION_PAIRS.get(session_name, SCAN_PAIRS)
+
+
+def has_volatility_spike(indicators: dict) -> bool:
+    """
+    Check if ATR indicates above-average volatility.
+    High volatility = better breakout opportunities.
+    """
+    atr = indicators.get("atr", 0)
+    current_price = indicators.get("current_price", 1)
+    if current_price == 0:
+        return False
+    atr_ratio = (atr / current_price) * 100
+    # Flag as volatile if ATR > 0.3% of price
+    return atr_ratio > 0.3
 
 
 def check_technical_confluence(indicators: dict, direction: str) -> tuple[bool, str]:
-    """
-    Check if all technical indicators confirm the trade direction.
-    Returns (passes: bool, reason: str)
-    """
+    """Check if all technical indicators confirm the trade direction."""
     rsi = indicators.get("rsi", 50)
     macd_hist = indicators.get("macd_hist", 0)
     ema_cross = indicators.get("ema_cross", "BELOW")
@@ -39,41 +121,36 @@ def check_technical_confluence(indicators: dict, direction: str) -> tuple[bool, 
     trend = indicators.get("trend", "NEUTRAL")
 
     if direction == "BUY":
-        # All must confirm bullish
         if ema_cross != "ABOVE":
-            return False, "EMA20 is below EMA50 — no bullish trend"
+            return False, "EMA20 below EMA50 — no bullish trend"
         if rsi < 35 or rsi > 68:
             return False, f"RSI {rsi:.1f} not in buy zone (35-68)"
         if macd_hist < 0:
-            return False, f"MACD histogram {macd_hist:.5f} is bearish"
+            return False, f"MACD histogram bearish"
         if ema20_slope < 0:
-            return False, "EMA20 slope is falling — weak momentum"
+            return False, "EMA20 slope falling"
         if trend == "BEARISH":
-            return False, "Overall trend is bearish"
+            return False, "Overall trend bearish"
         return True, "All BUY conditions confirmed"
 
     elif direction == "SELL":
-        # All must confirm bearish
         if ema_cross != "BELOW":
-            return False, "EMA20 is above EMA50 — no bearish trend"
+            return False, "EMA20 above EMA50 — no bearish trend"
         if rsi > 65 or rsi < 32:
             return False, f"RSI {rsi:.1f} not in sell zone (32-65)"
         if macd_hist > 0:
-            return False, f"MACD histogram {macd_hist:.5f} is bullish"
+            return False, "MACD histogram bullish"
         if ema20_slope > 0:
-            return False, "EMA20 slope is rising — weak bearish momentum"
+            return False, "EMA20 slope rising"
         if trend == "BULLISH":
-            return False, "Overall trend is bullish"
+            return False, "Overall trend bullish"
         return True, "All SELL conditions confirmed"
 
     return False, "Direction is NO_TRADE"
 
 
 def signal_already_exists(db: Session, pair: str, timeframe: str) -> bool:
-    """
-    Check if a recent active signal already exists for this pair/timeframe.
-    Avoids generating duplicate signals.
-    """
+    """Check if a recent active signal exists for this pair/timeframe."""
     from datetime import timedelta
     cutoff = datetime.now(timezone.utc) - timedelta(hours=4)
     existing = db.query(Signal).filter(
@@ -87,83 +164,70 @@ def signal_already_exists(db: Session, pair: str, timeframe: str) -> bool:
 
 
 async def analyze_pair(pair: str, timeframe: str) -> Optional[dict]:
-    """
-    Analyze a single pair on a single timeframe.
-    Returns signal data if conditions are met, None otherwise.
-    """
+    """Analyze a single pair. Only calls Claude AI if pre-checks pass."""
     try:
-        # Step 1: Fetch market data
+        # Fetch market data
         df = await fetch_ohlcv(pair, timeframe, 200)
         if df is None:
-            print(f"[AutoSignal] No data for {pair} {timeframe}")
             return None
 
-        # Step 2: Compute indicators
+        # Compute indicators
         indicators = compute_all_indicators(df)
         if not indicators:
-            print(f"[AutoSignal] Could not compute indicators for {pair} {timeframe}")
             return None
 
-        # Step 3: Quick pre-check before calling AI
-        # Only call AI if there's some directional bias
+        # Pre-check directional bias before calling AI
         rsi = indicators.get("rsi", 50)
         ema_cross = indicators.get("ema_cross", "")
         macd_hist = indicators.get("macd_hist", 0)
 
-        # Determine likely direction from indicators
-        bullish_points = 0
-        bearish_points = 0
+        bullish_points = sum([
+            ema_cross == "ABOVE",
+            rsi > 50,
+            macd_hist > 0,
+        ])
+        bearish_points = sum([
+            ema_cross == "BELOW",
+            rsi < 50,
+            macd_hist < 0,
+        ])
 
-        if ema_cross == "ABOVE":
-            bullish_points += 1
-        else:
-            bearish_points += 1
-
-        if rsi > 50:
-            bullish_points += 1
-        else:
-            bearish_points += 1
-
-        if macd_hist > 0:
-            bullish_points += 1
-        else:
-            bearish_points += 1
-
-        # Skip if market is too mixed (not enough directional bias)
+        # Skip if no clear directional bias — SAVES API CREDITS
         if bullish_points == bearish_points:
-            print(f"[AutoSignal] {pair} {timeframe} — mixed signals, skipping")
+            print(f"[AutoSignal] {pair} {timeframe} — mixed signals, skipping AI call")
             return None
 
-        # Step 4: Generate AI signal
-        print(f"[AutoSignal] Analyzing {pair} {timeframe}...")
+        # Skip if no volatility spike during non-session times
+        if not has_volatility_spike(indicators):
+            print(f"[AutoSignal] {pair} {timeframe} — low volatility, skipping AI call")
+            return None
+
+        # Only now call Claude AI
+        print(f"[AutoSignal] 🤖 Calling AI for {pair} {timeframe}...")
         ai_result = await generate_ai_signal(pair, timeframe, indicators)
 
         direction = ai_result.get("direction", "NO_TRADE")
         confidence = ai_result.get("confidence_score", 0)
         rr_ratio = ai_result.get("rr_ratio", 0)
 
-        # Step 5: Check minimum thresholds
         if direction == "NO_TRADE":
             print(f"[AutoSignal] {pair} {timeframe} — AI says NO_TRADE")
             return None
 
         if confidence < MIN_CONFIDENCE:
-            print(f"[AutoSignal] {pair} {timeframe} — confidence {confidence}% below minimum {MIN_CONFIDENCE}%")
+            print(f"[AutoSignal] {pair} {timeframe} — confidence {confidence}% below {MIN_CONFIDENCE}%")
             return None
 
         if rr_ratio and rr_ratio < MIN_RR_RATIO:
-            print(f"[AutoSignal] {pair} {timeframe} — R:R {rr_ratio} below minimum {MIN_RR_RATIO}")
+            print(f"[AutoSignal] {pair} {timeframe} — R:R {rr_ratio} below {MIN_RR_RATIO}")
             return None
 
-        # Step 6: Check technical confluence
         passes, reason = check_technical_confluence(indicators, direction)
         if not passes:
             print(f"[AutoSignal] {pair} {timeframe} — confluence failed: {reason}")
             return None
 
-        # All checks passed!
-        print(f"[AutoSignal] ✅ HIGH PROBABILITY SIGNAL: {pair} {timeframe} {direction} | Confidence: {confidence}% | R:R: {rr_ratio}")
-
+        print(f"[AutoSignal] ✅ HIGH PROBABILITY: {pair} {timeframe} {direction} | {confidence}% | R:R {rr_ratio}")
         return {
             "pair": pair,
             "timeframe": timeframe,
@@ -184,9 +248,8 @@ async def save_auto_signal(signal_data: dict) -> Optional[Signal]:
         timeframe = signal_data["timeframe"]
         ai_result = signal_data["ai_result"]
 
-        # Double-check no recent signal exists
         if signal_already_exists(db, pair, timeframe):
-            print(f"[AutoSignal] Signal already exists for {pair} {timeframe}, skipping")
+            print(f"[AutoSignal] Signal already exists for {pair} {timeframe}")
             return None
 
         from datetime import timedelta
@@ -217,7 +280,6 @@ async def save_auto_signal(signal_data: dict) -> Optional[Signal]:
         db.commit()
         db.refresh(signal)
 
-        # Cache signal in Redis
         signal_dict = {
             "id": str(signal.id),
             "pair": signal.pair,
@@ -244,11 +306,11 @@ async def save_auto_signal(signal_data: dict) -> Optional[Signal]:
         }
         cache_signal(pair, timeframe, signal_dict)
 
-        print(f"[AutoSignal] 💾 Saved signal: {pair} {timeframe} {signal.direction} @ {signal.current_price}")
+        print(f"[AutoSignal] 💾 Saved: {pair} {timeframe} {signal.direction} @ {signal.current_price}")
         return signal
 
     except Exception as e:
-        print(f"[AutoSignal] Error saving signal: {e}")
+        print(f"[AutoSignal] Error saving: {e}")
         db.rollback()
         return None
     finally:
@@ -271,91 +333,79 @@ async def expire_old_signals():
         if expired:
             print(f"[AutoSignal] Expired {len(expired)} old signals")
     except Exception as e:
-        print(f"[AutoSignal] Error expiring signals: {e}")
+        print(f"[AutoSignal] Error expiring: {e}")
     finally:
         db.close()
 
 
-def is_market_open() -> bool:
-    """
-    Check if Forex market is active.
-    Forex market hours in UTC:
-    - Sunday 22:00 UTC — Friday 22:00 UTC (market is open)
-    - Best liquidity: London (07:00-16:00 UTC) + New York (12:00-21:00 UTC)
-    - We scan during high liquidity sessions only to save API credits
-    """
-    now = datetime.now(timezone.utc)
-    weekday = now.weekday()  # 0=Monday, 6=Sunday
-    hour = now.hour
-
-    # Skip Saturday entirely (weekday 5)
-    if weekday == 5:
-        return False
-
-    # Skip Sunday before 22:00 UTC (market opens Sunday 22:00)
-    if weekday == 6 and hour < 22:
-        return False
-
-    # Skip Friday after 22:00 UTC (market closes Friday 22:00)
-    if weekday == 4 and hour >= 22:
-        return False
-
-    # Only scan during high liquidity hours (UTC):
-    # London session: 07:00 - 16:00 UTC
-    # New York session: 12:00 - 21:00 UTC
-    # Combined active window: 07:00 - 21:00 UTC
-    # In EAT (UTC+3): 10:00 - 00:00 midnight
-    if hour < 7 or hour >= 21:
-        return False
-
-    return True
-
-
 async def auto_signal_loop():
     """
-    Main background loop — runs every 15 minutes during market hours.
-    Scans all pairs and timeframes for high-probability setups.
-    Skips scanning outside London/New York sessions to save API credits.
+    Smart background loop:
+    - Checks every 30 minutes if we're near a session open
+    - Only scans relevant pairs for that session
+    - Only calls Claude AI if indicators show clear directional bias
+    - Skips low volatility markets
+    This reduces API calls by ~90% vs scanning everything every 15 mins
     """
-    print("[AutoSignal] 🚀 Auto Signal Engine started")
-    print(f"[AutoSignal] Scanning {len(SCAN_PAIRS)} pairs on {len(SCAN_TIMEFRAMES)} timeframes every {SCAN_INTERVAL//60} minutes")
-    print(f"[AutoSignal] Minimum confidence: {MIN_CONFIDENCE}% | Minimum R:R: {MIN_RR_RATIO}")
-    print("[AutoSignal] Active hours: London + New York sessions (07:00-21:00 UTC / 10:00-00:00 EAT)")
+    print("[AutoSignal] 🚀 Smart Auto Signal Engine started")
+    print("[AutoSignal] Strategy: Session-based scanning + volatility filter")
+    print(f"[AutoSignal] Sessions: Tokyo(00:00) London(07:00) NewYork(12:00) UTC")
+    print(f"[AutoSignal] Min confidence: {MIN_CONFIDENCE}% | Min R:R: {MIN_RR_RATIO}")
 
-    # Wait 30 seconds on startup
     await asyncio.sleep(30)
+
+    last_session_scanned = None
 
     while True:
         try:
             now = datetime.now(timezone.utc)
 
+            # Check if market is open
             if not is_market_open():
-                next_check = 30  # check again in 30 minutes
-                print(f"[AutoSignal] 😴 Market closed or low liquidity at {now.strftime('%H:%M UTC')} — sleeping {next_check} mins")
-                await asyncio.sleep(next_check * 60)
+                print(f"[AutoSignal] 😴 Market closed at {now.strftime('%H:%M UTC')} — checking again in 30 mins")
+                await asyncio.sleep(1800)
                 continue
 
-            print(f"\n[AutoSignal] 🔍 Starting scan at {now.strftime('%Y-%m-%d %H:%M UTC')}")
+            # Check if we're near a session open
+            active_session = get_active_session(now)
 
-            # Expire old signals first
+            if active_session is None:
+                print(f"[AutoSignal] ⏰ No session open at {now.strftime('%H:%M UTC')} — checking in 30 mins")
+                await asyncio.sleep(1800)
+                continue
+
+            session_name = active_session["name"]
+
+            # Don't scan the same session twice
+            if session_name == last_session_scanned:
+                print(f"[AutoSignal] ⏭ Already scanned {session_name} — checking in 30 mins")
+                await asyncio.sleep(1800)
+                continue
+
+            # New session detected — scan!
+            print(f"\n[AutoSignal] 🔔 {session_name} detected at {now.strftime('%H:%M UTC')}")
+
             await expire_old_signals()
+
+            # Get relevant pairs for this session
+            pairs_to_scan = get_pairs_for_session(session_name)
+            print(f"[AutoSignal] Scanning {len(pairs_to_scan)} pairs: {', '.join(pairs_to_scan)}")
 
             signals_generated = 0
 
-            # Scan each pair and timeframe
-            for pair in SCAN_PAIRS:
+            for pair in pairs_to_scan:
                 for timeframe in SCAN_TIMEFRAMES:
-                    await asyncio.sleep(8)  # delay between calls
+                    await asyncio.sleep(5)
                     result = await analyze_pair(pair, timeframe)
                     if result:
                         saved = await save_auto_signal(result)
                         if saved:
                             signals_generated += 1
 
-            print(f"[AutoSignal] ✅ Scan complete — {signals_generated} new signals generated")
+            print(f"[AutoSignal] ✅ {session_name} scan complete — {signals_generated} signals generated")
+            last_session_scanned = session_name
 
         except Exception as e:
             print(f"[AutoSignal] Loop error: {e}")
 
-        print(f"[AutoSignal] 💤 Next scan in {SCAN_INTERVAL//60} minutes")
-        await asyncio.sleep(SCAN_INTERVAL)
+        await asyncio.sleep(1800)  # check every 30 minutes
