@@ -103,3 +103,12 @@ def delete_alert(
     db.commit()
 
     return {"message": "Alert deleted successfully."}
+
+@router.post("/test-telegram")
+async def test_telegram(current_user: User = Depends(get_current_user)):
+    """Send a test Telegram notification."""
+    from app.services.telegram_service import send_test_notification
+    success = await send_test_notification()
+    if success:
+        return {"message": "Test notification sent to Telegram successfully!"}
+    return {"message": "Failed to send. Check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in Railway variables."}

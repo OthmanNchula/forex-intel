@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     APP_NAME: str = "Forex Intel"
     VERSION: str = "1.0.0"
+    
+    # Telegram Bot
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_CHAT_ID: str = ""
 
     # CORS - allowed origins for frontend
     ALLOWED_ORIGINS: List[str] = [

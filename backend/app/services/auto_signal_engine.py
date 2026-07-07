@@ -307,6 +307,14 @@ async def save_auto_signal(signal_data: dict) -> Optional[Signal]:
         cache_signal(pair, timeframe, signal_dict)
 
         print(f"[AutoSignal] 💾 Saved: {pair} {timeframe} {signal.direction} @ {signal.current_price}")
+        
+        # Send Telegram notification
+        try:
+            from app.services.telegram_service import send_signal_notification
+            await send_signal_notification(ai_result, pair, timeframe)
+        except Exception as e:
+            print(f"[AutoSignal] Telegram notification failed: {e}")
+            
         return signal
 
     except Exception as e:
