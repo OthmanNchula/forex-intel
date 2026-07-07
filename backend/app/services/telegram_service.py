@@ -1,23 +1,22 @@
 import httpx
-from app.config import settings
+import os
+
 
 async def send_telegram_message(message: str) -> bool:
     """Send a message to the configured Telegram chat."""
-    print(f"[Telegram] Token: '{settings.TELEGRAM_BOT_TOKEN[:10]}...' Chat: '{settings.TELEGRAM_CHAT_ID}'")
-    if not settings.TELEGRAM_BOT_TOKEN or not settings.TELEGRAM_CHAT_ID:
-        print("[Telegram] Bot token or chat ID not configured")
-        return False
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
     
-async def send_telegram_message(message: str) -> bool:
-    """Send a message to the configured Telegram chat."""
-    if not settings.TELEGRAM_BOT_TOKEN or not settings.TELEGRAM_CHAT_ID:
+    print(f"[Telegram] Token exists: {bool(bot_token)} | Chat ID exists: {bool(chat_id)}")
+    
+    if not bot_token or not chat_id:
         print("[Telegram] Bot token or chat ID not configured")
         return False
 
-    url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
 
     payload = {
-        "chat_id": settings.TELEGRAM_CHAT_ID,
+        "chat_id": chat_id,
         "text": message,
         "parse_mode": "HTML",
     }
@@ -37,10 +36,7 @@ async def send_telegram_message(message: str) -> bool:
 
 
 async def send_signal_notification(signal_data: dict, pair: str, timeframe: str) -> None:
-    """
-    Send a formatted trading signal notification to Telegram.
-    Called when the Auto Signal Engine finds a high-probability setup.
-    """
+    """Send a formatted trading signal notification to Telegram."""
     direction = signal_data.get("direction", "")
     confidence = signal_data.get("confidence_score", 0)
     current_price = signal_data.get("current_price", 0)
@@ -54,7 +50,6 @@ async def send_signal_notification(signal_data: dict, pair: str, timeframe: str)
     explanation = signal_data.get("ai_explanation", "")
     risk_warning = signal_data.get("risk_warning", "")
 
-    # Direction emoji
     if direction == "BUY":
         emoji = "🟢"
         action = "BUY (LONG)"
@@ -62,9 +57,8 @@ async def send_signal_notification(signal_data: dict, pair: str, timeframe: str)
         emoji = "🔴"
         action = "SELL (SHORT)"
     else:
-        return  # Don't send NO_TRADE notifications
+        return
 
-    # Format price based on pair
     def fmt(price):
         if not price:
             return "N/A"
@@ -103,10 +97,9 @@ TP3: {fmt(tp3)}
 {risk_warning}
 
 ━━━━━━━━━━━━━━━━━━
-⚠️ <i>Not financial advice. Always use proper risk management. Test on demo first.</i>
+⚠️ <i>Not financial advice. Always use proper risk management.</i>
 ━━━━━━━━━━━━━━━━━━
 """
-
     await send_telegram_message(message.strip())
 
 
@@ -115,19 +108,18 @@ async def send_test_notification() -> bool:
     message = """
 🚀 <b>Forex Intel Bot Connected!</b>
 
-Your Telegram notifications are set up correctly.
+Your Telegram notifications are working!
 
 You will receive alerts here when:
 ✅ A high-probability signal is detected
-✅ Confidence is 70%+ 
+✅ Confidence is 70%+
 ✅ Risk:Reward is 1.5+
 ✅ All indicators confirm the direction
 
 The Auto Signal Engine scans at:
 🕐 London Open (10:00 AM EAT)
-🕒 New York Open (3:00 PM EAT)  
+🕒 New York Open (3:00 PM EAT)
 🕓 London/NY Overlap (3-7 PM EAT)
-🕖 And other key sessions
 
 ⚠️ <i>Not financial advice. Always use demo account first.</i>
 """
