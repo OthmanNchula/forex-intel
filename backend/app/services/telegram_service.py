@@ -1,7 +1,13 @@
 import httpx
 from app.config import settings
 
-
+async def send_telegram_message(message: str) -> bool:
+    """Send a message to the configured Telegram chat."""
+    print(f"[Telegram] Token: '{settings.TELEGRAM_BOT_TOKEN[:10]}...' Chat: '{settings.TELEGRAM_CHAT_ID}'")
+    if not settings.TELEGRAM_BOT_TOKEN or not settings.TELEGRAM_CHAT_ID:
+        print("[Telegram] Bot token or chat ID not configured")
+        return False
+    
 async def send_telegram_message(message: str) -> bool:
     """Send a message to the configured Telegram chat."""
     if not settings.TELEGRAM_BOT_TOKEN or not settings.TELEGRAM_CHAT_ID:
