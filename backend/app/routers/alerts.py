@@ -112,3 +112,12 @@ async def test_telegram(current_user: User = Depends(get_current_user)):
     if success:
         return {"message": "Test notification sent to Telegram successfully!"}
     return {"message": "Failed to send. Check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in Railway variables."}
+
+@router.post("/test-email")
+async def test_email(current_user: User = Depends(get_current_user)):
+    """Send a test email notification."""
+    from app.services.email_service import send_test_email
+    success = await send_test_email()
+    if success:
+        return {"message": "Test email sent to your Gmail successfully!"}
+    return {"message": "Failed to send. Check RESEND_API_KEY and NOTIFICATION_EMAIL in Railway variables."}

@@ -314,7 +314,14 @@ async def save_auto_signal(signal_data: dict) -> Optional[Signal]:
             await send_signal_notification(ai_result, pair, timeframe)
         except Exception as e:
             print(f"[AutoSignal] Telegram notification failed: {e}")
-            
+
+        # Send Email notification
+        try:
+            from app.services.email_service import send_signal_email
+            await send_signal_email(ai_result, pair, timeframe)
+        except Exception as e:
+            print(f"[AutoSignal] Email notification failed: {e}")
+
         return signal
 
     except Exception as e:

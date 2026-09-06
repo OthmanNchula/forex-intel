@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # Telegram Bot
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
+    
+    # Email Notifications
+    RESEND_API_KEY: str = ""
+    NOTIFICATION_EMAIL: str = ""
+    
 
     # CORS - allowed origins for frontend
     ALLOWED_ORIGINS: List[str] = [
