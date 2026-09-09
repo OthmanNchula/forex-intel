@@ -98,18 +98,38 @@ def get_pairs_for_session(session_name: str) -> list:
     return SESSION_PAIRS.get(session_name, SCAN_PAIRS)
 
 
-def has_volatility_spike(indicators: dict) -> bool:
+# Pair-specific minimum ATR values
+# Based on each pair's typical daily movement
+PAIR_ATR_THRESHOLDS = {
+    "EUR/USD": 0.00035,   # typical H1 ATR for EURUSD
+    "GBP/USD": 0.00045,   # GBP moves more than EUR
+    "USD/JPY": 0.035,     # JPY pairs have different pip size
+    "USD/CHF": 0.00035,   # similar to EURUSD
+    "AUD/USD": 0.00035,   # similar to EURUSD
+    "USD/CAD": 0.00040,   # slightly higher
+    "XAU/USD": 0.40,      # Gold moves in dollars not pips
+}
+
+DEFAULT_ATR_THRESHOLD = 0.00035  # fallback for unknown pairs
+
+
+def has_volatility_spike(indicators: dict, pair: str = "") -> bool:
     """
-    Check if ATR indicates above-average volatility.
-    High volatility = better breakout opportunities.
+    Check if ATR indicates sufficient volatility for a valid signal.
+    Uses pair-specific thresholds instead of a single ratio.
+    This fixes the issue where EUR/USD was always failing the check.
     """
     atr = indicators.get("atr", 0)
-    current_price = indicators.get("current_price", 1)
-    if current_price == 0:
+    if atr == 0:
         return False
-    atr_ratio = (atr / current_price) * 100
-    # Flag as volatile if ATR > 0.3% of price
-    return atr_ratio > 0.3
+
+    # Get pair-specific threshold
+    threshold = PAIR_ATR_THRESHOLDS.get(pair, DEFAULT_ATR_THRESHOLD)
+
+    passes = atr >= threshold
+    if not passes:
+        print(f"[AutoSignal] ATR {atr:.5f} below threshold {threshold:.5f} for {pair}")
+    return passes
 
 
 def check_technical_confluence(indicators: dict, direction: str) -> tuple[bool, str]:
@@ -198,7 +218,7 @@ async def analyze_pair(pair: str, timeframe: str) -> Optional[dict]:
             return None
 
         # Skip if no volatility spike during non-session times
-        if not has_volatility_spike(indicators):
+        if not has_volatility_spike(indicators, pair):
             print(f"[AutoSignal] {pair} {timeframe} — low volatility, skipping AI call")
             return None
 
