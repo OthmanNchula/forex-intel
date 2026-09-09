@@ -22,7 +22,7 @@ SCAN_PAIRS = [
 SCAN_TIMEFRAMES = ["H1", "H4"]
 
 # Minimum thresholds
-MIN_CONFIDENCE = 70
+MIN_CONFIDENCE = 60
 MIN_RR_RATIO = 1.5
 SCAN_INTERVAL = 3600  # 1 hour default
 
