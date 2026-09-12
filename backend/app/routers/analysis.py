@@ -50,7 +50,7 @@ async def generate_signal(
         )
 
     # Step 3: Generate AI signal
-    ai_result = await generate_ai_signal(pair, timeframe, indicators)
+    ai_result = await generate_ai_signal(pair, timeframe, indicators, df)
 
     # Step 4: Save signal to database
     signal = Signal(
