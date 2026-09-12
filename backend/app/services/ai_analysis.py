@@ -160,7 +160,6 @@ def check_sr_proximity(indicators: dict) -> dict:
 
     return {"near_support": near_sup, "near_resistance": near_res, "warning": warning}
 
-
 def build_analysis_prompt(
     pair: str,
     timeframe: str,
@@ -168,7 +167,8 @@ def build_analysis_prompt(
     df=None,
 ) -> str:
     """Build the enhanced structured prompt to send to Claude."""
-
+    print(f"[AI Analysis] df received: {df is not None}, rows: {len(df) if df is not None else 0}")
+    
     current_price     = indicators.get("current_price")
     ema20             = indicators.get("ema20")
     ema50             = indicators.get("ema50")
