@@ -167,7 +167,6 @@ def build_analysis_prompt(
     df=None,
 ) -> str:
     """Build the enhanced structured prompt to send to Claude."""
-    print(f"[AI Analysis] df received: {df is not None}, rows: {len(df) if df is not None else 0}")
     
     current_price     = indicators.get("current_price")
     ema20             = indicators.get("ema20")
