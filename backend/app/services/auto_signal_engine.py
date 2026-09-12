@@ -20,6 +20,7 @@ SCAN_PAIRS = [
 ]
 
 SCAN_TIMEFRAMES = ["H1", "H4"]
+SCAN_TIMEFRAMES_OVERLAP = ["M15", "H1", "H4"]
 
 # Minimum thresholds
 MIN_CONFIDENCE = 62
@@ -428,8 +429,15 @@ async def auto_signal_loop():
 
             signals_generated = 0
 
+            # Use M15 during highest liquidity sessions for more opportunities
+            if session_name in ["London/NY Overlap", "New York Open"]:
+                timeframes_to_scan = ["M15", "H1", "H4"]
+                print(f"[AutoSignal] Using M15+H1+H4 (high liquidity session)")
+            else:
+                timeframes_to_scan = SCAN_TIMEFRAMES
+
             for pair in pairs_to_scan:
-                for timeframe in SCAN_TIMEFRAMES:
+                for timeframe in timeframes_to_scan:
                     await asyncio.sleep(5)
                     result = await analyze_pair(pair, timeframe)
                     if result:
