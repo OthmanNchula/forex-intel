@@ -22,7 +22,7 @@ SCAN_PAIRS = [
 SCAN_TIMEFRAMES = ["H1", "H4"]
 
 # Minimum thresholds
-MIN_CONFIDENCE = 60
+MIN_CONFIDENCE = 62
 MIN_RR_RATIO = 1.5
 SCAN_INTERVAL = 3600  # 1 hour default
 
@@ -224,7 +224,7 @@ async def analyze_pair(pair: str, timeframe: str) -> Optional[dict]:
 
         # Only now call Claude AI
         print(f"[AutoSignal] 🤖 Calling AI for {pair} {timeframe}...")
-        ai_result = await generate_ai_signal(pair, timeframe, indicators)
+        ai_result = await generate_ai_signal(pair, timeframe, indicators, df)
 
         direction = ai_result.get("direction", "NO_TRADE")
         confidence = ai_result.get("confidence_score", 0)
