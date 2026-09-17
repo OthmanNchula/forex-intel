@@ -272,22 +272,41 @@ function CloseTradeButton({
   const [closePrice, setClosePrice] = useState("");
   const [showInput, setShowInput] = useState(false);
 
-  function handleClose() {
-      const cp = parseFloat(closePrice);
-      if (!cp) return;
+function handleClose() {
+    const cp = parseFloat(closePrice);
+    console.log("Close price:", cp, "Trade:", trade.pair, trade.direction);
+    if (!cp || isNaN(cp)) {
+      console.error("Invalid close price");
+      return;
+    }
 
-      // Correct pip size per pair
-      let pipSize = 0.0001;
-      if (trade.pair.includes("JPY")) pipSize = 0.01;
-      if (trade.pair.includes("XAU")) pipSize = 0.01;
+    // Correct pip size per pair
+    let pipSize = 0.0001;
+    if (trade.pair.includes("JPY")) pipSize = 0.01;
+    if (trade.pair.includes("XAU")) pipSize = 0.01;
 
-      // Correct pip value per pair per lot
-      let pipValuePerLot = 10.0;
-      if (trade.pair.includes("XAU")) pipValuePerLot = 1.0;
-      if (trade.pair.includes("JPY")) pipValuePerLot = 6.5;
+    // Correct pip value per lot
+    let pipValuePerLot = 10.0;
+    if (trade.pair.includes("XAU")) pipValuePerLot = 1.0;
+    if (trade.pair.includes("JPY")) pipValuePerLot = 6.5;
 
-      const pipValue = trade.lot_size * pipValuePerLot;
+    const pipValue = trade.lot_size * pipValuePerLot;
+
+    let pips = 0;
+    if (trade.direction === "BUY") {
+      pips = (cp - trade.entry_price) / pipSize;
+    } else {
+      pips = (trade.entry_price - cp) / pipSize;
+    }
+
+    const pnl = Math.round(pips * pipValue * 100) / 100;
+    const result = pnl > 0 ? "WIN" : pnl < 0 ? "LOSS" : "BREAKEVEN";
+    
+    console.log("Pips:", pips, "PnL:", pnl, "Result:", result);
+    onClose(trade.id, result, pnl, Math.round(pips * 10) / 10);
+    setShowInput(false);
   }
+  
   if (!showInput) {
     return (
       <button
