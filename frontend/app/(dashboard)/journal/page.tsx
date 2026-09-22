@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { journalApi } from "@/lib/api";
+import { authApi, journalApi } from "@/lib/api";
 import { Trade, TradeStats } from "@/types";
 import {
   formatCurrency,
@@ -11,6 +11,8 @@ import {
 } from "@/lib/utils-trading";
 import { BookOpen, Plus, X, TrendingUp } from "lucide-react";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import { useStore } from "@/store/useStore";
+import { saveAuth, getToken } from "@/lib/auth";
 
 const PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD", "AUD/USD", "USD/CAD"];
 
@@ -20,10 +22,24 @@ export default function JournalPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [filterResult, setFilterResult] = useState("");
+  const setUser = useStore((s) => s.setUser);
 
   useEffect(() => {
     loadJournal();
   }, []);
+
+  // Re-fetch the current user (balance included) and sync it into the
+  // store + localStorage cache so the header updates immediately.
+  async function refreshUser() {
+    try {
+      const res = await authApi.me();
+      setUser(res.data);
+      const token = getToken();
+      if (token) saveAuth(token, res.data);
+    } catch (err) {
+      console.error("User refresh error:", err);
+    }
+  }
 
   async function loadJournal() {
     setLoading(true);
@@ -54,7 +70,7 @@ export default function JournalPage() {
         pnl_pips: pnlPips,
         closed_at: new Date().toISOString(),
       });
-      loadJournal();
+      await Promise.all([loadJournal(), refreshUser()]);
     } catch (err) {
       console.error("Close trade error:", err);
     }
@@ -65,6 +81,8 @@ export default function JournalPage() {
     try {
       await journalApi.deleteTrade(id);
       setTrades((prev) => prev.filter((t) => t.id !== id));
+      // Deleting a closed trade reverses its balance effect server-side too.
+      refreshUser();
     } catch (err) {
       console.error("Delete trade error:", err);
     }
