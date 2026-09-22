@@ -374,16 +374,78 @@ async def expire_old_signals():
         db.close()
 
 
+async def run_signal_scan_cycle() -> dict:
+    """
+    Run ONE scan cycle and return immediately — no loop, no sleep.
+
+    This is the reusable core used by both:
+    - the in-process background loop (auto_signal_loop), which only runs
+      while the web dyno happens to be awake, and
+    - the standalone Railway Cron entrypoint (backend/cron_scan.py), which
+      runs on its own schedule regardless of whether the web process is
+      idle. The cron path is what guarantees scans actually happen —
+      the in-process loop is just a bonus when the dyno is already up.
+
+    Safe to call repeatedly within the same session window: session
+    detection (30-min window) plus the 4-hour dedup in
+    signal_already_exists() prevent duplicate signals if this fires
+    more than once while a session is still "active".
+    """
+    now = datetime.now(timezone.utc)
+
+    if not is_market_open():
+        print(f"[AutoSignal] 😴 Market closed at {now.strftime('%H:%M UTC')}")
+        return {"scanned": False, "reason": "market_closed"}
+
+    active_session = get_active_session(now)
+    if active_session is None:
+        print(f"[AutoSignal] ⏰ No session open at {now.strftime('%H:%M UTC')}")
+        return {"scanned": False, "reason": "no_session"}
+
+    session_name = active_session["name"]
+    print(f"\n[AutoSignal] 🔔 {session_name} detected at {now.strftime('%H:%M UTC')}")
+
+    await expire_old_signals()
+
+    pairs_to_scan = get_pairs_for_session(session_name)
+    print(f"[AutoSignal] Scanning {len(pairs_to_scan)} pairs: {', '.join(pairs_to_scan)}")
+
+    signals_generated = 0
+
+    # Use M15 during highest liquidity sessions for more opportunities
+    if session_name in ["London/NY Overlap", "New York Open"]:
+        timeframes_to_scan = ["M15", "H1", "H4"]
+        print(f"[AutoSignal] Using M15+H1+H4 (high liquidity session)")
+    else:
+        timeframes_to_scan = SCAN_TIMEFRAMES
+
+    for pair in pairs_to_scan:
+        for timeframe in timeframes_to_scan:
+            await asyncio.sleep(2)
+            result = await analyze_pair(pair, timeframe)
+            if result:
+                saved = await save_auto_signal(result)
+                if saved:
+                    signals_generated += 1
+
+    print(f"[AutoSignal] ✅ {session_name} scan complete — {signals_generated} signals generated")
+    return {
+        "scanned": True,
+        "session": session_name,
+        "pairs": pairs_to_scan,
+        "signals_generated": signals_generated,
+    }
+
+
 async def auto_signal_loop():
     """
-    Smart background loop:
-    - Checks every 30 minutes if we're near a session open
-    - Only scans relevant pairs for that session
-    - Only calls Claude AI if indicators show clear directional bias
-    - Skips low volatility markets
-    This reduces API calls by ~90% vs scanning everything every 15 mins
+    In-process background loop — a bonus scan path that only runs while
+    the web dyno is awake. Checks every 30 minutes and delegates the
+    actual work to run_signal_scan_cycle(). The Railway Cron job
+    (backend/cron_scan.py) is the reliable path; this loop just adds
+    extra coverage for free when the process happens to be up anyway.
     """
-    print("[AutoSignal] 🚀 Smart Auto Signal Engine started")
+    print("[AutoSignal] 🚀 In-process Auto Signal loop started (bonus coverage)")
     print("[AutoSignal] Strategy: Session-based scanning + volatility filter")
     print(f"[AutoSignal] Sessions: Tokyo(00:00) London(07:00) NewYork(12:00) UTC")
     print(f"[AutoSignal] Min confidence: {MIN_CONFIDENCE}% | Min R:R: {MIN_RR_RATIO}")
@@ -395,58 +457,15 @@ async def auto_signal_loop():
     while True:
         try:
             now = datetime.now(timezone.utc)
-
-            # Check if market is open
-            if not is_market_open():
-                print(f"[AutoSignal] 😴 Market closed at {now.strftime('%H:%M UTC')} — checking again in 30 mins")
-                await asyncio.sleep(1800)
-                continue
-
-            # Check if we're near a session open
             active_session = get_active_session(now)
+            session_name = active_session["name"] if active_session else None
 
-            if active_session is None:
-                print(f"[AutoSignal] ⏰ No session open at {now.strftime('%H:%M UTC')} — checking in 30 mins")
-                await asyncio.sleep(1800)
-                continue
-
-            session_name = active_session["name"]
-
-            # Don't scan the same session twice
-            if session_name == last_session_scanned:
-                print(f"[AutoSignal] ⏭ Already scanned {session_name} — checking in 30 mins")
-                await asyncio.sleep(1800)
-                continue
-
-            # New session detected — scan!
-            print(f"\n[AutoSignal] 🔔 {session_name} detected at {now.strftime('%H:%M UTC')}")
-
-            await expire_old_signals()
-
-            # Get relevant pairs for this session
-            pairs_to_scan = get_pairs_for_session(session_name)
-            print(f"[AutoSignal] Scanning {len(pairs_to_scan)} pairs: {', '.join(pairs_to_scan)}")
-
-            signals_generated = 0
-
-            # Use M15 during highest liquidity sessions for more opportunities
-            if session_name in ["London/NY Overlap", "New York Open"]:
-                timeframes_to_scan = ["M15", "H1", "H4"]
-                print(f"[AutoSignal] Using M15+H1+H4 (high liquidity session)")
+            if session_name and session_name != last_session_scanned:
+                result = await run_signal_scan_cycle()
+                if result.get("scanned"):
+                    last_session_scanned = session_name
             else:
-                timeframes_to_scan = SCAN_TIMEFRAMES
-
-            for pair in pairs_to_scan:
-                for timeframe in timeframes_to_scan:
-                    await asyncio.sleep(5)
-                    result = await analyze_pair(pair, timeframe)
-                    if result:
-                        saved = await save_auto_signal(result)
-                        if saved:
-                            signals_generated += 1
-
-            print(f"[AutoSignal] ✅ {session_name} scan complete — {signals_generated} signals generated")
-            last_session_scanned = session_name
+                print(f"[AutoSignal] ⏭ Nothing new at {now.strftime('%H:%M UTC')} — checking in 30 mins")
 
         except Exception as e:
             print(f"[AutoSignal] Loop error: {e}")
