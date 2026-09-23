@@ -4,17 +4,23 @@ from datetime import datetime, timezone
 
 
 async def send_email(subject: str, html_content: str) -> bool:
-    """Send an email using Resend API."""
-    api_key = os.environ.get("RESEND_API_KEY", "")
-    to_email = os.environ.get("NOTIFICATION_EMAIL", "")
+    """
+    Send an email using the Resend API.
 
-    if not api_key or not to_email:
+    NOTIFICATION_EMAIL can hold a single address or a comma-separated list
+    (e.g. "me@gmail.com, colleague@gmail.com") to notify multiple people.
+    """
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    raw_recipients = os.environ.get("NOTIFICATION_EMAIL", "")
+    to_emails = [e.strip() for e in raw_recipients.split(",") if e.strip()]
+
+    if not api_key or not to_emails:
         print("[Email] RESEND_API_KEY or NOTIFICATION_EMAIL not configured")
         return False
 
     payload = {
         "from": "Forex Intel <onboarding@resend.dev>",
-        "to": [to_email],
+        "to": to_emails,
         "subject": subject,
         "html": html_content,
     }
@@ -30,7 +36,7 @@ async def send_email(subject: str, html_content: str) -> bool:
                 },
             )
             if response.status_code == 200:
-                print(f"[Email] ✅ Email sent to {to_email}")
+                print(f"[Email] ✅ Email sent to {', '.join(to_emails)}")
                 return True
             else:
                 print(f"[Email] ❌ Failed: {response.text}")
