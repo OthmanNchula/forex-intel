@@ -272,7 +272,9 @@ export default function JournalPage() {
           onClose={() => setShowForm(false)}
           onAdded={() => {
             setShowForm(false);
-            loadJournal();
+            // Adding a trade can resolve it (WIN/LOSS) immediately and
+            // update the balance server-side, so refresh it here too.
+            Promise.all([loadJournal(), refreshUser()]);
           }}
         />
       )}
