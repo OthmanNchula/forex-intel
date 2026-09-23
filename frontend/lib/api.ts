@@ -87,6 +87,10 @@ export const journalApi = {
     api.patch(`/api/journal/${id}`, data),
   deleteTrade: (id: string) => api.delete(`/api/journal/${id}`),
   getStats: () => api.get("/api/journal/stats"),
+  recalculateBalance: (startingBalance?: number) =>
+    api.post("/api/journal/recalculate-balance", null, {
+      params: startingBalance ? { starting_balance: startingBalance } : {},
+    }),
 };
 
 // Alerts endpoints

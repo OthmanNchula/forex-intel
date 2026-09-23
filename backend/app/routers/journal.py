@@ -286,11 +286,12 @@ def update_trade(
         raise HTTPException(status_code=404, detail="Trade not found.")
 
     update_data = payload.model_dump(exclude_unset=True)
+    was_open = trade.result == "OPEN"
 
-    # If close_price is being set, recalculate PnL correctly
+    # If close_price is being set, recalculate PnL correctly (authoritative
+    # server-side calculation — overrides any pnl the client may have sent).
     close_price = update_data.get("close_price")
-    if close_price and trade.result == "OPEN":
-        # Calculate correct PnL
+    if close_price and was_open:
         correct_pnl = calculate_pnl(
             pair=trade.pair,
             direction=trade.direction,
@@ -310,16 +311,28 @@ def update_trade(
                 take_profit=trade.take_profit,
             )
 
-        # Update account balance
-        if "result" in update_data and update_data["result"] != "OPEN":
-            user = db.query(User).filter(User.id == current_user.id).first()
-            if user:
-                old_balance = user.account_balance or 10000.0
-                user.account_balance = round(old_balance + correct_pnl, 2)
-                print(f"[Journal] Balance: {old_balance} + {correct_pnl} = {user.account_balance}")
-
         if not update_data.get("closed_at"):
             update_data["closed_at"] = datetime.now(timezone.utc)
+
+    # Update account balance whenever this update resolves a previously-OPEN
+    # trade — regardless of whether close_price was included. The old code
+    # only credited the balance inside the close_price branch above, but the
+    # frontend's inline "Close" button computes pnl/result client-side and
+    # PATCHes {result, pnl, pnl_pips, closed_at} WITHOUT close_price, so that
+    # path never touched the balance at all. Meanwhile delete_trade below
+    # unconditionally *debits* trade.pnl for any non-OPEN trade being
+    # deleted. Combined, every trade closed via that button and later
+    # deleted silently drained the balance with no matching credit ever
+    # having been applied — which is what caused the balance to drift far
+    # below what Total PnL implies.
+    new_result = update_data.get("result")
+    if was_open and new_result and new_result != "OPEN":
+        pnl_to_apply = update_data.get("pnl", trade.pnl or 0) or 0
+        user = db.query(User).filter(User.id == current_user.id).first()
+        if user:
+            old_balance = user.account_balance or 10000.0
+            user.account_balance = round(old_balance + pnl_to_apply, 2)
+            print(f"[Journal] Balance: {old_balance} + {pnl_to_apply} = {user.account_balance}")
 
     for field, value in update_data.items():
         setattr(trade, field, value)
@@ -355,3 +368,40 @@ def delete_trade(
     db.commit()
 
     return {"message": "Trade deleted successfully."}
+
+
+@router.post("/recalculate-balance")
+def recalculate_balance(
+    starting_balance: float = Query(default=10000.0),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    One-time repair tool: recomputes account_balance from scratch as
+    starting_balance + sum(pnl) across every closed trade currently in the
+    journal, ignoring whatever drift accumulated from past balance-update
+    bugs (see update_trade's close_price/pnl handling above). Safe to call
+    any time you suspect the displayed balance no longer matches your
+    trade history — it's idempotent.
+    """
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    trades = db.query(Trade).filter(Trade.user_id == current_user.id).all()
+    total_pnl = sum(t.pnl or 0 for t in trades if t.result in ["WIN", "LOSS", "BREAKEVEN"])
+
+    old_balance = user.account_balance
+    user.account_balance = round(starting_balance + total_pnl, 2)
+    db.commit()
+    db.refresh(user)
+
+    print(f"[Journal] Balance recalculated: {old_balance} -> {user.account_balance} "
+          f"(starting {starting_balance} + total_pnl {total_pnl})")
+
+    return {
+        "old_balance": old_balance,
+        "new_balance": user.account_balance,
+        "starting_balance": starting_balance,
+        "total_pnl": round(total_pnl, 2),
+    }

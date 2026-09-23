@@ -38,6 +38,7 @@ class Trade(Base):
 
     # Result
     result = Column(String(20), default="OPEN")           # WIN, LOSS, BREAKEVEN, OPEN
+    close_price = Column(Float, nullable=True)            # price the trade was closed at
     pnl = Column(Float, nullable=True)                    # profit/loss in USD
     pnl_pips = Column(Float, nullable=True)               # profit/loss in pips
 

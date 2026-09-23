@@ -61,10 +61,12 @@ export default function JournalPage() {
     id: string,
     result: string,
     pnl: number,
-    pnlPips: number
+    pnlPips: number,
+    closePrice: number
   ) {
     try {
       await journalApi.updateTrade(id, {
+        close_price: closePrice,
         result,
         pnl,
         pnl_pips: pnlPips,
@@ -107,13 +109,34 @@ export default function JournalPage() {
             Track and review all your trades
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Add Trade
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              if (
+                !confirm(
+                  "Recalculate your balance from scratch as $10,000 + the total PnL of all closed trades? Use this if the header balance looks wrong."
+                )
+              )
+                return;
+              try {
+                await journalApi.recalculateBalance();
+                await refreshUser();
+              } catch (err) {
+                console.error("Recalculate balance error:", err);
+              }
+            }}
+            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium px-4 py-2 rounded-lg transition-colors border border-gray-700"
+          >
+            Fix Balance
+          </button>
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Add Trade
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -287,7 +310,13 @@ function CloseTradeButton({
   onClose,
 }: {
   trade: Trade;
-  onClose: (id: string, result: string, pnl: number, pnlPips: number) => void;
+  onClose: (
+    id: string,
+    result: string,
+    pnl: number,
+    pnlPips: number,
+    closePrice: number
+  ) => void;
 }) {
   const [closePrice, setClosePrice] = useState("");
   const [showInput, setShowInput] = useState(false);
@@ -323,7 +352,7 @@ function handleClose() {
     const result = pnl > 0 ? "WIN" : pnl < 0 ? "LOSS" : "BREAKEVEN";
     
     console.log("Pips:", pips, "PnL:", pnl, "Result:", result);
-    onClose(trade.id, result, pnl, Math.round(pips * 10) / 10);
+    onClose(trade.id, result, pnl, Math.round(pips * 10) / 10, cp);
     setShowInput(false);
   }
   

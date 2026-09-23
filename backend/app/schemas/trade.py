@@ -18,6 +18,7 @@ class TradeCreate(BaseModel):
 
 
 class TradeUpdate(BaseModel):
+    close_price: Optional[float] = None
     result: Optional[str] = None          # WIN, LOSS, BREAKEVEN
     pnl: Optional[float] = None
     pnl_pips: Optional[float] = None
@@ -37,6 +38,7 @@ class TradeResponse(BaseModel):
     lot_size: float
     risk_amount: float
     result: str
+    close_price: Optional[float] = None
     pnl: Optional[float] = None
     pnl_pips: Optional[float] = None
     opened_at: datetime
