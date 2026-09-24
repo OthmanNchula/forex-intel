@@ -27,25 +27,28 @@ MIN_CONFIDENCE = 62
 MIN_RR_RATIO = 1.5
 SCAN_INTERVAL = 3600  # 1 hour default
 
-# Key market session opens in UTC
-# These are the highest liquidity moments — best for signals
-SESSION_OPENS = [
-    {"name": "Tokyo Open", "hour": 0, "minute": 0},
-    {"name": "London Open", "hour": 7, "minute": 0},
-    {"name": "New York Open", "hour": 12, "minute": 0},
-    {"name": "London/NY Overlap", "hour": 13, "minute": 0},
-    {"name": "London Close", "hour": 16, "minute": 0},
-    {"name": "NY Close", "hour": 21, "minute": 0},
+# Market session RANGES in UTC (continuous coverage, not just the opening
+# bell). The engine used to only wake up within ±30 minutes of each open
+# time below, which meant it was actively scanning only ~6 hours/day and
+# sat completely idle the rest of the time — including the bulk of the
+# London and New York sessions. These ranges cover 00:00–21:00 UTC
+# continuously so a valid setup mid-session isn't missed. 21:00–24:00 UTC
+# is left as a quiet low-liquidity gap before Tokyo reopens.
+SESSION_RANGES = [
+    {"name": "Tokyo Session", "start_hour": 0, "end_hour": 7},
+    {"name": "London Session", "start_hour": 7, "end_hour": 12},
+    {"name": "New York Open", "start_hour": 12, "end_hour": 13},
+    {"name": "London/NY Overlap", "start_hour": 13, "end_hour": 16},
+    {"name": "New York Session", "start_hour": 16, "end_hour": 21},
 ]
 
 # High impact pairs per session
 SESSION_PAIRS = {
-    "Tokyo Open": ["USD/JPY", "AUD/USD"],
-    "London Open": ["EUR/USD", "GBP/USD", "XAU/USD"],
+    "Tokyo Session": ["USD/JPY", "AUD/USD"],
+    "London Session": ["EUR/USD", "GBP/USD", "XAU/USD"],
     "New York Open": ["EUR/USD", "GBP/USD", "USD/CAD", "XAU/USD"],
     "London/NY Overlap": ["EUR/USD", "GBP/USD", "XAU/USD", "USD/JPY"],
-    "London Close": ["EUR/USD", "GBP/USD"],
-    "NY Close": ["XAU/USD", "USD/JPY"],
+    "New York Session": ["EUR/USD", "GBP/USD", "USD/CAD", "XAU/USD"],
 }
 
 
@@ -70,25 +73,14 @@ def is_market_open() -> bool:
 
 def get_active_session(now: datetime) -> Optional[dict]:
     """
-    Check if current time is within 30 minutes of a session open.
-    Returns session info if active, None otherwise.
-    This is the smart trigger — only scan near session opens.
+    Check which session RANGE the current time falls in (see
+    SESSION_RANGES above). Returns session info if active, None otherwise
+    (only true outside 00:00–21:00 UTC, i.e. the daily low-liquidity gap).
     """
     hour = now.hour
-    minute = now.minute
 
-    for session in SESSION_OPENS:
-        session_hour = session["hour"]
-        session_minute = session["minute"]
-
-        # Calculate minutes difference
-        current_total = hour * 60 + minute
-        session_total = session_hour * 60 + session_minute
-
-        diff = abs(current_total - session_total)
-
-        # Trigger within 30 minutes of session open
-        if diff <= 30:
+    for session in SESSION_RANGES:
+        if session["start_hour"] <= hour < session["end_hour"]:
             return session
 
     return None
