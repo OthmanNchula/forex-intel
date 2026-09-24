@@ -405,3 +405,21 @@ def recalculate_balance(
         "starting_balance": starting_balance,
         "total_pnl": round(total_pnl, 2),
     }
+
+
+@router.delete("/clear-all")
+def clear_all_trades(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Delete every trade in the current user's journal. Does NOT touch
+    account_balance — call /recalculate-balance afterwards (with whatever
+    starting_balance you want) to reset it cleanly to a fresh number.
+    """
+    deleted_count = (
+        db.query(Trade).filter(Trade.user_id == current_user.id).delete()
+    )
+    db.commit()
+
+    return {"message": f"Deleted {deleted_count} trade(s).", "deleted_count": deleted_count}

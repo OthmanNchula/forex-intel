@@ -91,6 +91,7 @@ export const journalApi = {
     api.post("/api/journal/recalculate-balance", null, {
       params: startingBalance ? { starting_balance: startingBalance } : {},
     }),
+  clearAllTrades: () => api.delete("/api/journal/clear-all"),
 };
 
 // Alerts endpoints

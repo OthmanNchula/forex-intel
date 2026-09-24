@@ -114,12 +114,35 @@ export default function JournalPage() {
             onClick={async () => {
               if (
                 !confirm(
-                  "Recalculate your balance from scratch as $10,000 + the total PnL of all closed trades? Use this if the header balance looks wrong."
+                  "Delete ALL trades in your journal? This cannot be undone. Your balance is untouched — use Fix Balance afterwards to reset it to a fresh starting amount."
                 )
               )
                 return;
               try {
-                await journalApi.recalculateBalance();
+                await journalApi.clearAllTrades();
+                await loadJournal();
+              } catch (err) {
+                console.error("Clear all trades error:", err);
+              }
+            }}
+            className="flex items-center gap-2 bg-red-900/40 hover:bg-red-900/60 text-red-300 font-medium px-4 py-2 rounded-lg transition-colors border border-red-800"
+          >
+            Clear All Trades
+          </button>
+          <button
+            onClick={async () => {
+              const input = prompt(
+                "Set your starting balance (e.g. match your real/demo broker account). Your balance will be recalculated as this amount + the total PnL of all closed trades:",
+                "10000"
+              );
+              if (input === null) return; // cancelled
+              const startingBalance = parseFloat(input);
+              if (isNaN(startingBalance) || startingBalance < 0) {
+                alert("Please enter a valid positive number.");
+                return;
+              }
+              try {
+                await journalApi.recalculateBalance(startingBalance);
                 await refreshUser();
               } catch (err) {
                 console.error("Recalculate balance error:", err);
