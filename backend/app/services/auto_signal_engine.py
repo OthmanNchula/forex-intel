@@ -27,19 +27,23 @@ MIN_CONFIDENCE = 62
 MIN_RR_RATIO = 1.5
 SCAN_INTERVAL = 3600  # 1 hour default
 
-# Market session RANGES in UTC (continuous coverage, not just the opening
-# bell). The engine used to only wake up within ±30 minutes of each open
-# time below, which meant it was actively scanning only ~6 hours/day and
-# sat completely idle the rest of the time — including the bulk of the
-# London and New York sessions. These ranges cover 00:00–21:00 UTC
-# continuously so a valid setup mid-session isn't missed. 21:00–24:00 UTC
-# is left as a quiet low-liquidity gap before Tokyo reopens.
+# Market session windows in UTC — reverted back to narrow ±30-45 min
+# windows around each session's actual opening bell, NOT continuous
+# 00:00-21:00 coverage. The continuous-coverage version made the engine
+# eligible to call the Claude API on almost every scan cycle, all day,
+# every trading day — combined with the standalone Railway Cron job
+# (which has no memory between runs and re-scans everything on every
+# fire), that burned through the Anthropic API credits non-stop. These
+# narrow windows mean get_active_session() returns None most of the
+# day, so run_signal_scan_cycle() exits immediately without touching
+# the AI at all outside these windows — restoring the original
+# "~6 hours/day of active scanning" design.
 SESSION_RANGES = [
-    {"name": "Tokyo Session", "start_hour": 0, "end_hour": 7},
-    {"name": "London Session", "start_hour": 7, "end_hour": 12},
+    {"name": "Tokyo Session", "start_hour": 0, "end_hour": 1},
+    {"name": "London Session", "start_hour": 7, "end_hour": 8},
     {"name": "New York Open", "start_hour": 12, "end_hour": 13},
-    {"name": "London/NY Overlap", "start_hour": 13, "end_hour": 16},
-    {"name": "New York Session", "start_hour": 16, "end_hour": 21},
+    {"name": "London/NY Overlap", "start_hour": 13, "end_hour": 14},
+    {"name": "New York Session", "start_hour": 16, "end_hour": 17},
 ]
 
 # High impact pairs per session
