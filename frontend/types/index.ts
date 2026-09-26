@@ -56,6 +56,7 @@ export interface Trade {
   lot_size: number;
   risk_amount: number;
   result: "OPEN" | "WIN" | "LOSS" | "BREAKEVEN";
+  close_price: number | null;
   pnl: number | null;
   pnl_pips: number | null;
   opened_at: string;

@@ -18,6 +18,20 @@ class TradeCreate(BaseModel):
 
 
 class TradeUpdate(BaseModel):
+    # Core trade fields — editable so a mistyped entry, wrong pair/direction,
+    # etc. can be corrected after the fact instead of deleting and
+    # re-adding the trade. See update_trade() in routers/journal.py for how
+    # editing these on an already-closed trade recomputes pnl and adjusts
+    # the account balance by the difference, so correcting a mistake never
+    # leaves the balance out of sync with the corrected numbers.
+    pair: Optional[str] = None
+    direction: Optional[str] = None       # BUY or SELL
+    entry_price: Optional[float] = None
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    lot_size: Optional[float] = None
+    risk_amount: Optional[float] = None
+
     close_price: Optional[float] = None
     result: Optional[str] = None          # WIN, LOSS, BREAKEVEN
     pnl: Optional[float] = None

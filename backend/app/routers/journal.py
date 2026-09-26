@@ -47,7 +47,15 @@ def calculate_pnl(pair: str, direction: str, entry: float, close: float, lots: f
     - PnL = pips * pip_value_per_lot * lots
     - Positive if trade went in correct direction, negative otherwise
     """
-    pair = pair.upper()
+    # Normalize the same way create_trade() normalizes before storing
+    # ("XAU-USD", "xau/usd", or trailing/leading whitespace all need to
+    # land on the same "XAU/USD" key) — otherwise this silently misses
+    # the dict and falls back to the FX-pair defaults (0.0001 / $10),
+    # which for XAU/USD is a 1000x PnL inflation (100x pip size x 10x
+    # pip value) instead of a loud error.
+    pair = pair.strip().upper().replace("-", "/")
+    if pair not in PIP_SIZES:
+        print(f"[Journal] WARNING: no pip config for pair {pair!r} — falling back to FX defaults")
     pip_size = PIP_SIZES.get(pair, 0.0001)
     pip_value_per_lot = PIP_VALUES.get(pair, 10.0)
 
@@ -288,6 +296,14 @@ def update_trade(
     update_data = payload.model_dump(exclude_unset=True)
     was_open = trade.result == "OPEN"
 
+    # Normalize pair/direction the same way create_trade() does, so an edit
+    # of "xau-usd" or "sell" lands on the same "XAU/USD" / "SELL" the pip
+    # lookup and calculate_pnl() expect.
+    if "pair" in update_data and update_data["pair"]:
+        update_data["pair"] = update_data["pair"].strip().upper().replace("-", "/")
+    if "direction" in update_data and update_data["direction"]:
+        update_data["direction"] = update_data["direction"].strip().upper()
+
     # If close_price is being set, recalculate PnL correctly (authoritative
     # server-side calculation — overrides any pnl the client may have sent).
     close_price = update_data.get("close_price")
@@ -333,6 +349,54 @@ def update_trade(
             old_balance = user.account_balance or 10000.0
             user.account_balance = round(old_balance + pnl_to_apply, 2)
             print(f"[Journal] Balance: {old_balance} + {pnl_to_apply} = {user.account_balance}")
+
+    # Editing a mistake on a trade that was ALREADY closed before this
+    # request (was_open is False) — e.g. the entry price was mistyped, the
+    # wrong pair/direction was picked, or the lot size was wrong. If any of
+    # the numbers that feed calculate_pnl() are changing, recompute pnl from
+    # the corrected values and adjust the balance by the difference from
+    # what was previously applied. Without this, correcting a typo would
+    # silently leave the old (wrong) pnl baked into both the trade row and
+    # the account balance.
+    core_outcome_fields = {
+        "pair", "direction", "entry_price", "lot_size",
+        "close_price", "stop_loss", "take_profit",
+    }
+    if not was_open and trade.close_price is not None and core_outcome_fields & update_data.keys():
+        new_pair = update_data.get("pair", trade.pair)
+        new_direction = update_data.get("direction", trade.direction)
+        new_entry = update_data.get("entry_price", trade.entry_price)
+        new_lots = update_data.get("lot_size", trade.lot_size)
+        new_close = update_data.get("close_price", trade.close_price)
+        new_sl = update_data.get("stop_loss", trade.stop_loss)
+        new_tp = update_data.get("take_profit", trade.take_profit)
+
+        recomputed_pnl = calculate_pnl(
+            pair=new_pair,
+            direction=new_direction,
+            entry=new_entry,
+            close=new_close,
+            lots=new_lots,
+        )
+        old_pnl = trade.pnl or 0
+        pnl_diff = round(recomputed_pnl - old_pnl, 2)
+        update_data["pnl"] = recomputed_pnl
+
+        if "result" not in update_data:
+            update_data["result"] = determine_result(
+                direction=new_direction,
+                entry=new_entry,
+                close=new_close,
+                stop_loss=new_sl,
+                take_profit=new_tp,
+            )
+
+        if pnl_diff:
+            user = db.query(User).filter(User.id == current_user.id).first()
+            if user:
+                old_balance = user.account_balance or 10000.0
+                user.account_balance = round(old_balance + pnl_diff, 2)
+                print(f"[Journal] Trade {trade_id} edited — pnl corrected {old_pnl} -> {recomputed_pnl}, balance adjusted by {pnl_diff}")
 
     for field, value in update_data.items():
         setattr(trade, field, value)

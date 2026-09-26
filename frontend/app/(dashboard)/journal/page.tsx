@@ -9,7 +9,7 @@ import {
   getResultColor,
   getPnLColor,
 } from "@/lib/utils-trading";
-import { BookOpen, Plus, X, TrendingUp, Trash2, Wallet, Target, Gauge } from "lucide-react";
+import { BookOpen, Plus, X, TrendingUp, Trash2, Wallet, Target, Gauge, Pencil } from "lucide-react";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { useStore } from "@/store/useStore";
 import { saveAuth, getToken } from "@/lib/auth";
@@ -22,6 +22,7 @@ export default function JournalPage() {
   const [stats, setStats] = useState<TradeStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
   const [filterResult, setFilterResult] = useState("");
   const setUser = useStore((s) => s.setUser);
 
@@ -312,8 +313,16 @@ export default function JournalPage() {
                           />
                         )}
                         <button
+                          onClick={() => setEditingTrade(trade)}
+                          className="text-gray-500 hover:text-blue-400 transition-colors"
+                          title="Edit trade"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
                           onClick={() => deleteTrade(trade.id)}
                           className="text-gray-600 hover:text-red-400 transition-colors"
+                          title="Delete trade"
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -329,12 +338,27 @@ export default function JournalPage() {
 
       {/* Add Trade Modal */}
       {showForm && (
-        <AddTradeModal
+        <TradeFormModal
           onClose={() => setShowForm(false)}
-          onAdded={() => {
+          onSaved={() => {
             setShowForm(false);
             // Adding a trade can resolve it (WIN/LOSS) immediately and
             // update the balance server-side, so refresh it here too.
+            Promise.all([loadJournal(), refreshUser()]);
+          }}
+        />
+      )}
+
+      {/* Edit Trade Modal */}
+      {editingTrade && (
+        <TradeFormModal
+          trade={editingTrade}
+          onClose={() => setEditingTrade(null)}
+          onSaved={() => {
+            setEditingTrade(null);
+            // Editing a closed trade's numbers can change its pnl and the
+            // account balance server-side (see update_trade()), so refresh
+            // both, same as adding a trade.
             Promise.all([loadJournal(), refreshUser()]);
           }}
         />
@@ -430,22 +454,28 @@ function handleClose() {
   );
 }
 
-function AddTradeModal({
+function TradeFormModal({
+  trade,
   onClose,
-  onAdded,
+  onSaved,
 }: {
+  trade?: Trade | null;
   onClose: () => void;
-  onAdded: () => void;
+  onSaved: () => void;
 }) {
+  const isEdit = !!trade;
+  const isClosed = !!trade && trade.result !== "OPEN";
+
   const [form, setForm] = useState({
-    pair: "EUR/USD",
-    direction: "BUY",
-    entry_price: "",
-    stop_loss: "",
-    take_profit: "",
-    lot_size: "",
-    risk_amount: "",
-    user_notes: "",
+    pair: trade?.pair || "EUR/USD",
+    direction: trade?.direction || "BUY",
+    entry_price: trade ? String(trade.entry_price) : "",
+    stop_loss: trade ? String(trade.stop_loss) : "",
+    take_profit: trade ? String(trade.take_profit) : "",
+    lot_size: trade ? String(trade.lot_size) : "",
+    risk_amount: trade ? String(trade.risk_amount) : "",
+    close_price: trade?.close_price != null ? String(trade.close_price) : "",
+    user_notes: trade?.user_notes || "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -459,17 +489,42 @@ function AddTradeModal({
     setLoading(true);
     setError("");
     try {
-      await journalApi.createTrade({
-        ...form,
-        entry_price: parseFloat(form.entry_price),
-        stop_loss: parseFloat(form.stop_loss),
-        take_profit: parseFloat(form.take_profit),
-        lot_size: parseFloat(form.lot_size),
-        risk_amount: parseFloat(form.risk_amount),
-      });
-      onAdded();
+      if (isEdit && trade) {
+        const payload: Record<string, any> = {
+          pair: form.pair,
+          direction: form.direction,
+          entry_price: parseFloat(form.entry_price),
+          stop_loss: parseFloat(form.stop_loss),
+          take_profit: parseFloat(form.take_profit),
+          lot_size: parseFloat(form.lot_size),
+          risk_amount: parseFloat(form.risk_amount),
+          user_notes: form.user_notes,
+        };
+        // Only a closed trade has a close price to correct — the backend
+        // recomputes pnl (and adjusts the balance by the difference)
+        // whenever any of these numbers change on an already-closed trade.
+        if (isClosed && form.close_price !== "") {
+          payload.close_price = parseFloat(form.close_price);
+        }
+        await journalApi.updateTrade(trade.id, payload);
+      } else {
+        await journalApi.createTrade({
+          pair: form.pair,
+          direction: form.direction,
+          entry_price: parseFloat(form.entry_price),
+          stop_loss: parseFloat(form.stop_loss),
+          take_profit: parseFloat(form.take_profit),
+          lot_size: parseFloat(form.lot_size),
+          risk_amount: parseFloat(form.risk_amount),
+          user_notes: form.user_notes,
+        });
+      }
+      onSaved();
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Failed to add trade.");
+      setError(
+        err.response?.data?.detail ||
+          (isEdit ? "Failed to save changes." : "Failed to add trade.")
+      );
     } finally {
       setLoading(false);
     }
@@ -479,11 +534,21 @@ function AddTradeModal({
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
       <div className="glass-card p-6 w-full max-w-md animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-white font-bold text-lg">Add Trade</h2>
+          <h2 className="text-white font-bold text-lg">
+            {isEdit ? "Edit Trade" : "Add Trade"}
+          </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        {isEdit && (
+          <p className="text-gray-500 text-xs mb-4 -mt-2">
+            {isClosed
+              ? "This trade is closed — correcting any number below recalculates its PnL and adjusts your balance to match."
+              : "This trade is still open — corrections apply immediately."}
+          </p>
+        )}
 
         {error && (
           <div className="bg-red-500/10 ring-1 ring-red-500/30 rounded-xl p-3 mb-4">
@@ -538,6 +603,21 @@ function AddTradeModal({
             </div>
           ))}
 
+          {isClosed && (
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">
+                Close Price
+              </label>
+              <input
+                type="number"
+                step="any"
+                value={form.close_price}
+                onChange={(e) => update("close_price", e.target.value)}
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-xs text-gray-400 mb-1">Notes</label>
             <textarea
@@ -554,7 +634,13 @@ function AddTradeModal({
             disabled={loading}
             className="w-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-purple-600/20"
           >
-            {loading ? "Adding..." : "Add Trade"}
+            {loading
+              ? isEdit
+                ? "Saving..."
+                : "Adding..."
+              : isEdit
+              ? "Save Changes"
+              : "Add Trade"}
           </button>
         </form>
       </div>
