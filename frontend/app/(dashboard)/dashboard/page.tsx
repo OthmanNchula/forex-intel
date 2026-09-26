@@ -8,15 +8,25 @@ import {
   getDirectionBg,
   getConfidenceLabel,
 } from "@/lib/utils-trading";
-import { TrendingUp, Zap, BookOpen } from "lucide-react";
+import { TrendingUp, Zap, BookOpen, Cpu } from "lucide-react";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import Link from "next/link";
+
+interface AiUsage {
+  daily_used: number;
+  daily_budget: number;
+  daily_remaining: number;
+  monthly_used: number;
+  monthly_budget: number;
+  monthly_remaining: number;
+}
 
 export default function DashboardPage() {
   const { user, activePair, setActivePair } = useStore();
   const [stats, setStats] = useState<TradeStats | null>(null);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [quotes, setQuotes] = useState<Record<string, any>>({});
+  const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,6 +47,13 @@ export default function DashboardPage() {
       }
     }
     loadDashboard();
+
+    // Separate, non-blocking load — a failure here (e.g. Redis hiccup)
+    // shouldn't take down the rest of the dashboard.
+    analysisApi
+      .getAiUsage()
+      .then((res) => setAiUsage(res.data))
+      .catch((err) => console.error("AI usage load error:", err));
   }, []);
 
   if (loading) return <LoadingSpinner />;
@@ -98,6 +115,36 @@ export default function DashboardPage() {
           </p>
         </div>
       </div>
+
+      {/* AI usage — daily/monthly call budget against the hard caps in
+          auto_signal_engine.py, so the spending limit isn't invisible */}
+      {aiUsage && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <h2 className="text-white font-semibold mb-3 flex items-center gap-2 text-sm">
+            <Cpu className="h-4 w-4 text-blue-400" />
+            AI Analysis Usage
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <UsageBar
+              label="Today"
+              used={aiUsage.daily_used}
+              budget={aiUsage.daily_budget}
+            />
+            <UsageBar
+              label="This Month"
+              used={aiUsage.monthly_used}
+              budget={aiUsage.monthly_budget}
+            />
+          </div>
+          {aiUsage.daily_used >= aiUsage.daily_budget && (
+            <p className="text-yellow-400 text-xs mt-3">
+              Today's AI budget is used up — signals are running on
+              technical-only analysis (no AI confirmation) until it
+              resets tomorrow.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Watchlist */}
@@ -216,6 +263,37 @@ export default function DashboardPage() {
           <p className="text-white font-medium text-sm">Trade Journal</p>
           <p className="text-gray-400 text-xs mt-1">Track your trades</p>
         </Link>
+      </div>
+    </div>
+  );
+}
+
+function UsageBar({
+  label,
+  used,
+  budget,
+}: {
+  label: string;
+  used: number;
+  budget: number;
+}) {
+  const pct = budget > 0 ? Math.min(100, Math.round((used / budget) * 100)) : 0;
+  const barColor =
+    pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-yellow-500" : "bg-blue-500";
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-gray-400 text-xs">{label}</span>
+        <span className="text-gray-300 text-xs font-mono">
+          {used} / {budget} calls
+        </span>
+      </div>
+      <div className="bg-gray-800 rounded-full h-2 overflow-hidden">
+        <div
+          className={`h-2 rounded-full ${barColor} transition-all`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );

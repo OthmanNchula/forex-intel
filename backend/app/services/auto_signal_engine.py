@@ -7,7 +7,13 @@ from app.models.signal import Signal
 from app.services.market_data import fetch_ohlcv
 from app.services.indicator_engine import compute_all_indicators
 from app.services.ai_analysis import generate_ai_signal
-from app.services.alert_service import cache_signal
+from app.services.alert_service import (
+    cache_signal,
+    is_within_ai_call_budget,
+    increment_monthly_ai_call_count,
+    is_within_daily_ai_call_budget,
+    increment_daily_ai_call_count,
+)
 
 # Pairs and timeframes to scan
 SCAN_PAIRS = [
@@ -27,23 +33,52 @@ MIN_CONFIDENCE = 62
 MIN_RR_RATIO = 1.5
 SCAN_INTERVAL = 3600  # 1 hour default
 
-# Market session windows in UTC — reverted back to narrow ±30-45 min
-# windows around each session's actual opening bell, NOT continuous
-# 00:00-21:00 coverage. The continuous-coverage version made the engine
-# eligible to call the Claude API on almost every scan cycle, all day,
-# every trading day — combined with the standalone Railway Cron job
-# (which has no memory between runs and re-scans everything on every
-# fire), that burned through the Anthropic API credits non-stop. These
-# narrow windows mean get_active_session() returns None most of the
-# day, so run_signal_scan_cycle() exits immediately without touching
-# the AI at all outside these windows — restoring the original
-# "~6 hours/day of active scanning" design.
+# There is deliberately NO per-pair/timeframe cooldown here anymore (it
+# was removed at the user's request) — every pair/timeframe that clears
+# the free pre-checks below gets analyzed by the AI every time it's
+# scanned, with no "already checked recently" skip. That means cost
+# control rests ENTIRELY on the hard monthly cap right below, not on
+# reducing how often the AI gets called. A volatile session scanned
+# often (e.g. by the 15-min standalone cron) can burn through the
+# monthly budget faster than it would with a cooldown — see the note
+# inside analyze_pair() for the full trade-off.
+
+# Hard monthly cap on AI calls — this is what actually guarantees a
+# dollar ceiling, unlike the cooldown/session-window tuning above which
+# only reduce the AVERAGE case. Based on this account's real observed
+# cost of ~$0.02/call (Sonnet, ~2,200 input + ~900 output tokens per
+# call): 900 calls/month x $0.02 ≈ $18, leaving headroom under a $20/mo
+# target even if the per-call cost drifts a bit. Once this is hit,
+# analyze_pair() stops calling the AI for the rest of the calendar month
+# and falls back to a technical-indicators-only signal instead of going
+# silent — see generate_technical_fallback_signal() below.
+MONTHLY_AI_CALL_BUDGET = 900
+
+# Daily slice of the monthly budget — spreads MONTHLY_AI_CALL_BUDGET
+# evenly across a 30-day month so a single volatile day (or week) can't
+# spend the whole month's calls at once and leave nothing but
+# technical-only fallback signals for the rest of the month. Once
+# today's slice is used up, the engine falls back to technical-only for
+# the REST OF TODAY specifically and picks the AI back up tomorrow, even
+# if the overall monthly budget still has room left — "wait for
+# tomorrow," not "wait for next month."
+DAILY_AI_CALL_BUDGET = MONTHLY_AI_CALL_BUDGET // 30  # = 30 calls/day
+
+# Market session windows in UTC — wider than the bare ±30-min open-only
+# windows, so the engine is awake for the hours a move is actually
+# likely to develop, not just the exact minute of the open. Still NOT
+# the old continuous 00:00-21:00 coverage — gaps remain in the lower-
+# liquidity middle of each session. With no per-pair cooldown anymore,
+# every scan inside these windows that clears the free pre-checks is a
+# real AI call, so the width of these windows now directly affects how
+# fast the daily and monthly budgets get used up — narrower windows here
+# would make both last more comfortably if they're burning too fast.
 SESSION_RANGES = [
-    {"name": "Tokyo Session", "start_hour": 0, "end_hour": 1},
-    {"name": "London Session", "start_hour": 7, "end_hour": 8},
+    {"name": "Tokyo Session", "start_hour": 0, "end_hour": 2},
+    {"name": "London Session", "start_hour": 7, "end_hour": 10},
     {"name": "New York Open", "start_hour": 12, "end_hour": 13},
-    {"name": "London/NY Overlap", "start_hour": 13, "end_hour": 14},
-    {"name": "New York Session", "start_hour": 16, "end_hour": 17},
+    {"name": "London/NY Overlap", "start_hour": 13, "end_hour": 16},
+    {"name": "New York Session", "start_hour": 16, "end_hour": 18},
 ]
 
 # High impact pairs per session
@@ -166,6 +201,86 @@ def check_technical_confluence(indicators: dict, direction: str) -> tuple[bool, 
     return False, "Direction is NO_TRADE"
 
 
+# Fixed risk-reward multiples (in ATR) used ONLY when the monthly AI
+# budget is exhausted and we fall back to a technical-only signal. These
+# are a standard ATR-based stop/target approach, not something the AI
+# would necessarily choose — no support/resistance awareness, no
+# candlestick pattern read, no written reasoning. Treat these signals as
+# strictly lower-confidence than an AI-confirmed one.
+TECHNICAL_FALLBACK_SL_ATR_MULTIPLE = 1.5
+TECHNICAL_FALLBACK_TP1_ATR_MULTIPLE = 2.25   # RR 1.5
+TECHNICAL_FALLBACK_TP2_ATR_MULTIPLE = 3.0    # RR 2.0
+TECHNICAL_FALLBACK_TP3_ATR_MULTIPLE = 3.75   # RR 2.5
+TECHNICAL_FALLBACK_CONFIDENCE = 55           # deliberately below MIN_CONFIDENCE (62)
+
+
+def generate_technical_fallback_signal(pair: str, timeframe: str, indicators: dict, direction: str) -> dict:
+    """
+    Build a signal from indicators alone, with no AI call — used only
+    when MONTHLY_AI_CALL_BUDGET has been reached for the month. Entry/
+    stop/targets come from fixed ATR multiples rather than an AI reading
+    of support/resistance or price action, so this is intentionally a
+    lower-confidence, lower-information signal than a normal AI one —
+    it exists so the account doesn't go completely silent for the rest
+    of the month, not as a like-for-like replacement.
+
+    The fallback nature is recorded directly in ai_explanation (rather
+    than a new DB column, which would need a migration) so it's visible
+    wherever ai_explanation is already displayed — the app UI, the
+    Telegram/email notifications — without any other code needing to
+    change to know the difference.
+    """
+    price = indicators["current_price"]
+    atr = indicators.get("atr", 0)
+    rsi = indicators.get("rsi", 50)
+    macd_hist = indicators.get("macd_hist", 0)
+
+    if direction == "BUY":
+        entry_low = round(price - atr * 0.1, 5)
+        entry_high = round(price + atr * 0.1, 5)
+        stop_loss = round(price - atr * TECHNICAL_FALLBACK_SL_ATR_MULTIPLE, 5)
+        tp1 = round(price + atr * TECHNICAL_FALLBACK_TP1_ATR_MULTIPLE, 5)
+        tp2 = round(price + atr * TECHNICAL_FALLBACK_TP2_ATR_MULTIPLE, 5)
+        tp3 = round(price + atr * TECHNICAL_FALLBACK_TP3_ATR_MULTIPLE, 5)
+    else:  # SELL
+        entry_low = round(price - atr * 0.1, 5)
+        entry_high = round(price + atr * 0.1, 5)
+        stop_loss = round(price + atr * TECHNICAL_FALLBACK_SL_ATR_MULTIPLE, 5)
+        tp1 = round(price - atr * TECHNICAL_FALLBACK_TP1_ATR_MULTIPLE, 5)
+        tp2 = round(price - atr * TECHNICAL_FALLBACK_TP2_ATR_MULTIPLE, 5)
+        tp3 = round(price - atr * TECHNICAL_FALLBACK_TP3_ATR_MULTIPLE, 5)
+
+    return {
+        "direction": direction,
+        "current_price": price,
+        "entry_low": entry_low,
+        "entry_high": entry_high,
+        "stop_loss": stop_loss,
+        "take_profit_1": tp1,
+        "take_profit_2": tp2,
+        "take_profit_3": tp3,
+        "rr_ratio": TECHNICAL_FALLBACK_TP1_ATR_MULTIPLE / TECHNICAL_FALLBACK_SL_ATR_MULTIPLE,
+        "confidence_score": TECHNICAL_FALLBACK_CONFIDENCE,
+        "ai_explanation": (
+            "[TECHNICAL-ONLY — monthly AI budget reached] This signal was generated from "
+            f"indicator confluence only (EMA20/50 cross, RSI {rsi:.1f}, MACD histogram "
+            f"{macd_hist:.5f}) with fixed ATR-based risk levels — no AI review of price "
+            "action, support/resistance, or written reasoning. Treat with more caution "
+            "than a normal AI-confirmed signal."
+        ),
+        "risk_warning": (
+            "Generated without AI confirmation because this month's AI analysis budget "
+            "has been used up. Entry/stop/target levels are simple ATR multiples, not a "
+            "reasoned read of the chart. Trading Forex involves significant risk of loss."
+        ),
+        "ema20": indicators.get("ema20"),
+        "ema50": indicators.get("ema50"),
+        "rsi": rsi,
+        "macd_hist": macd_hist,
+        "atr": atr,
+    }
+
+
 def signal_already_exists(db: Session, pair: str, timeframe: str) -> bool:
     """Check if a recent active signal exists for this pair/timeframe."""
     from datetime import timedelta
@@ -219,7 +334,61 @@ async def analyze_pair(pair: str, timeframe: str) -> Optional[dict]:
             print(f"[AutoSignal] {pair} {timeframe} — low volatility, skipping AI call")
             return None
 
-        # Only now call Claude AI
+        # The pre-check bias ("BUY"/"SELL") — used below by the technical
+        # fallback if the monthly AI budget has run out.
+        bias_direction = "BUY" if bullish_points > bearish_points else "SELL"
+
+        # NOTE: the per-pair/timeframe cooldown (was_recently_analyzed /
+        # mark_analyzed) was removed here at the user's request. Cost
+        # control now rests entirely on MONTHLY_AI_CALL_BUDGET below —
+        # every pair/timeframe that clears the free checks above gets a
+        # fresh AI call every time it's scanned, with no "already
+        # checked this recently" skip. That means a volatile session can
+        # burn through the monthly budget faster than before, which is a
+        # real trade-off: no missed re-analysis, but the technical-only
+        # fallback may kick in earlier in the month if conditions stay
+        # active. The functions still exist in alert_service.py if this
+        # needs to be reinstated later.
+
+        # Two spending caps, checked in order — either one being hit
+        # sends this to the technical-only fallback instead of the AI:
+        #
+        # 1. DAILY_AI_CALL_BUDGET — today's slice of the monthly budget.
+        #    This is what makes a single volatile day fall back to
+        #    technical-only for the REST OF TODAY and resume with the AI
+        #    tomorrow, instead of letting one busy day eat calls that
+        #    were meant to last the whole month.
+        # 2. MONTHLY_AI_CALL_BUDGET — the overall hard ceiling. Even if
+        #    today's slice isn't used up, once the month's total is
+        #    gone, that's it until next month.
+        budget_exhausted_reason = None
+        if not is_within_daily_ai_call_budget(DAILY_AI_CALL_BUDGET):
+            budget_exhausted_reason = f"today's AI budget ({DAILY_AI_CALL_BUDGET} calls/day) reached — resumes tomorrow"
+        elif not is_within_ai_call_budget(MONTHLY_AI_CALL_BUDGET):
+            budget_exhausted_reason = f"monthly AI budget ({MONTHLY_AI_CALL_BUDGET} calls) reached — resumes next month"
+
+        if budget_exhausted_reason:
+            print(f"[AutoSignal] 💸 {budget_exhausted_reason} — using technical-only fallback for {pair} {timeframe}")
+            passes, reason = check_technical_confluence(indicators, bias_direction)
+            if not passes:
+                print(f"[AutoSignal] {pair} {timeframe} — confluence failed: {reason}")
+                return None
+
+            ai_result = generate_technical_fallback_signal(pair, timeframe, indicators, bias_direction)
+            print(f"[AutoSignal] ✅ TECHNICAL-ONLY: {pair} {timeframe} {bias_direction} | "
+                  f"{TECHNICAL_FALLBACK_CONFIDENCE}% (no AI) | R:R {ai_result['rr_ratio']}")
+            return {
+                "pair": pair,
+                "timeframe": timeframe,
+                "ai_result": ai_result,
+                "indicators": indicators,
+            }
+
+        # Only now call Claude AI. Increment BOTH counters — daily and
+        # monthly are tracked independently, so both need bumping every
+        # time a call actually goes out.
+        increment_daily_ai_call_count()
+        increment_monthly_ai_call_count()
         print(f"[AutoSignal] 🤖 Calling AI for {pair} {timeframe}...")
         ai_result = await generate_ai_signal(pair, timeframe, indicators, df)
 

@@ -70,6 +70,7 @@ export const analysisApi = {
     api.get(`/api/analysis/signals/${pair.replace("/", "-")}/latest`),
   dismissSignal: (id: string) =>
     api.post(`/api/analysis/signals/${id}/dismiss`),
+  getAiUsage: () => api.get("/api/analysis/ai-usage"),
 };
 
 // Risk endpoints

@@ -7,11 +7,38 @@ from app.schemas.signal import SignalRequest, SignalResponse
 from app.services.market_data import fetch_ohlcv
 from app.services.indicator_engine import compute_all_indicators
 from app.services.ai_analysis import generate_ai_signal
-from app.services.alert_service import cache_signal, get_cached_signal
+from app.services.alert_service import (
+    cache_signal,
+    get_cached_signal,
+    get_daily_ai_call_count,
+    get_monthly_ai_call_count,
+)
+from app.services.auto_signal_engine import DAILY_AI_CALL_BUDGET, MONTHLY_AI_CALL_BUDGET
 from app.middleware.auth_middleware import get_current_user
 from app.models.user import User
 
 router = APIRouter(prefix="/api/analysis", tags=["AI Analysis"])
+
+
+@router.get("/ai-usage")
+def get_ai_usage(current_user: User = Depends(get_current_user)):
+    """
+    How many of today's and this month's AI analysis calls have been
+    used, against the hard budgets in auto_signal_engine.py. Powers the
+    usage indicator in the frontend so the daily/monthly caps aren't
+    invisible — the same numbers the scanning engine itself checks
+    before ever calling the AI.
+    """
+    daily_used = get_daily_ai_call_count()
+    monthly_used = get_monthly_ai_call_count()
+    return {
+        "daily_used": daily_used,
+        "daily_budget": DAILY_AI_CALL_BUDGET,
+        "daily_remaining": max(0, DAILY_AI_CALL_BUDGET - daily_used),
+        "monthly_used": monthly_used,
+        "monthly_budget": MONTHLY_AI_CALL_BUDGET,
+        "monthly_remaining": max(0, MONTHLY_AI_CALL_BUDGET - monthly_used),
+    }
 
 
 @router.post("/generate", response_model=SignalResponse)
