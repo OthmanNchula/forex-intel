@@ -64,7 +64,7 @@ export default function BacktestingPage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
           <FlaskConical className="h-6 w-6 text-blue-400" />
           Backtesting
@@ -75,7 +75,10 @@ export default function BacktestingPage() {
       </div>
 
       {/* Notice */}
-      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+      <div
+        className="glass-card stat-glow-blue p-4 animate-in fade-in slide-in-from-bottom-2"
+        style={{ animationDelay: "60ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+      >
         <p className="text-blue-400 text-sm">
           💡 The backtesting engine uses EMA crossover + RSI confirmation
           strategy with ATR-based stops. Always backtest before going live.
@@ -84,7 +87,10 @@ export default function BacktestingPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Parameters */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div
+          className="glass-card p-6 animate-in fade-in slide-in-from-bottom-2"
+          style={{ animationDelay: "120ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+        >
           <h2 className="text-white font-semibold mb-6">Strategy Parameters</h2>
           <form onSubmit={runBacktest} className="space-y-4">
 
@@ -94,7 +100,7 @@ export default function BacktestingPage() {
                 <select
                   value={pair}
                   onChange={(e) => setPair(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
+                  className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
                 >
                   {PAIRS.map((p) => (
                     <option key={p} value={p}>{p}</option>
@@ -108,7 +114,7 @@ export default function BacktestingPage() {
                 <select
                   value={timeframe}
                   onChange={(e) => setTimeframe(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
+                  className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
                 >
                   {TIMEFRAMES.map((tf) => (
                     <option key={tf} value={tf}>{tf}</option>
@@ -126,7 +132,7 @@ export default function BacktestingPage() {
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
+                  className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
                 />
               </div>
               <div>
@@ -137,13 +143,13 @@ export default function BacktestingPage() {
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
+                  className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
                 />
               </div>
             </div>
 
-            <div className="border-t border-gray-800 pt-4">
-              <p className="text-gray-400 text-xs mb-3 font-medium">
+            <div className="border-t border-white/[0.06] pt-4">
+              <p className="text-gray-400 text-xs mb-3 font-medium tracking-wide">
                 EMA CROSSOVER SETTINGS
               </p>
               <div className="grid grid-cols-2 gap-3">
@@ -157,7 +163,7 @@ export default function BacktestingPage() {
                     onChange={(e) => setEmaFast(e.target.value)}
                     min="5"
                     max="50"
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
+                    className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
                   />
                 </div>
                 <div>
@@ -170,14 +176,14 @@ export default function BacktestingPage() {
                     onChange={(e) => setEmaSlow(e.target.value)}
                     min="20"
                     max="200"
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
+                    className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="border-t border-gray-800 pt-4">
-              <p className="text-gray-400 text-xs mb-3 font-medium">
+            <div className="border-t border-white/[0.06] pt-4">
+              <p className="text-gray-400 text-xs mb-3 font-medium tracking-wide">
                 RISK SETTINGS
               </p>
               <div className="grid grid-cols-2 gap-3">
@@ -191,7 +197,7 @@ export default function BacktestingPage() {
                     onChange={(e) => setRsiLevel(e.target.value)}
                     min="60"
                     max="80"
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
+                    className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
                   />
                 </div>
                 <div>
@@ -205,14 +211,14 @@ export default function BacktestingPage() {
                     min="0.5"
                     max="5"
                     step="0.5"
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
+                    className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
                   />
                 </div>
               </div>
             </div>
 
             {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+              <div className="bg-red-500/10 ring-1 ring-red-500/30 rounded-xl p-3">
                 <p className="text-red-400 text-sm">{error}</p>
               </div>
             )}
@@ -220,7 +226,7 @@ export default function BacktestingPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
             >
               <Play className="h-4 w-4" />
               {loading ? "Running Backtest..." : "Run Backtest"}
@@ -231,7 +237,7 @@ export default function BacktestingPage() {
         {/* Results */}
         <div className="space-y-4">
           {loading && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
+            <div className="glass-card p-12 text-center">
               <div className="h-10 w-10 animate-spin rounded-full border-2 border-gray-600 border-t-blue-400 mx-auto mb-4" />
               <p className="text-gray-400 text-sm">
                 Running backtest on {pair} {timeframe}...
@@ -244,16 +250,16 @@ export default function BacktestingPage() {
 
           {result && !loading && (
             <>
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <div className="glass-card p-6 animate-in fade-in zoom-in-95 duration-400">
                 <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-green-400" />
                   Backtest Results — {pair} {timeframe}
                 </h2>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gray-800 rounded-xl p-4">
+                  <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-xl p-4">
                     <p className="text-gray-400 text-xs mb-1">Total Trades</p>
-                    <p className="text-white text-2xl font-bold">
+                    <p className="text-white text-2xl font-bold tabular-nums">
                       {result.total_trades}
                     </p>
                     <p className="text-gray-500 text-xs">
@@ -262,10 +268,10 @@ export default function BacktestingPage() {
                   </div>
 
                   <div
-                    className={`rounded-xl p-4 border ${
+                    className={`rounded-xl p-4 ring-1 ${
                       result.win_rate >= 50
-                        ? "bg-green-500/10 border-green-500/30"
-                        : "bg-red-500/10 border-red-500/30"
+                        ? "bg-green-500/[0.07] ring-green-500/25"
+                        : "bg-red-500/[0.07] ring-red-500/25"
                     }`}
                   >
                     <p
@@ -277,28 +283,28 @@ export default function BacktestingPage() {
                     >
                       Win Rate
                     </p>
-                    <p className="text-white text-2xl font-bold">
+                    <p className="text-white text-2xl font-bold tabular-nums">
                       {result.win_rate}%
                     </p>
                   </div>
 
                   <div
-                    className={`rounded-xl p-4 border ${
+                    className={`rounded-xl p-4 ring-1 ${
                       result.profit_factor >= 1.5
-                        ? "bg-green-500/10 border-green-500/30"
-                        : "bg-yellow-500/10 border-yellow-500/30"
+                        ? "bg-green-500/[0.07] ring-green-500/25"
+                        : "bg-amber-500/[0.07] ring-amber-500/25"
                     }`}
                   >
                     <p
                       className={`text-xs mb-1 ${
                         result.profit_factor >= 1.5
                           ? "text-green-400"
-                          : "text-yellow-400"
+                          : "text-amber-400"
                       }`}
                     >
                       Profit Factor
                     </p>
-                    <p className="text-white text-2xl font-bold">
+                    <p className="text-white text-2xl font-bold tabular-nums">
                       {result.profit_factor}
                     </p>
                     <p className="text-gray-500 text-xs">
@@ -307,10 +313,10 @@ export default function BacktestingPage() {
                   </div>
 
                   <div
-                    className={`rounded-xl p-4 border ${
+                    className={`rounded-xl p-4 ring-1 ${
                       result.max_drawdown_pct <= 15
-                        ? "bg-green-500/10 border-green-500/30"
-                        : "bg-red-500/10 border-red-500/30"
+                        ? "bg-green-500/[0.07] ring-green-500/25"
+                        : "bg-red-500/[0.07] ring-red-500/25"
                     }`}
                   >
                     <p
@@ -322,7 +328,7 @@ export default function BacktestingPage() {
                     >
                       Max Drawdown
                     </p>
-                    <p className="text-white text-2xl font-bold">
+                    <p className="text-white text-2xl font-bold tabular-nums">
                       {result.max_drawdown_pct}%
                     </p>
                     <p className="text-gray-500 text-xs">
@@ -330,18 +336,18 @@ export default function BacktestingPage() {
                     </p>
                   </div>
 
-                  <div className="bg-gray-800 rounded-xl p-4">
+                  <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-xl p-4">
                     <p className="text-gray-400 text-xs mb-1">Avg R:R</p>
-                    <p className="text-white text-2xl font-bold">
+                    <p className="text-white text-2xl font-bold tabular-nums">
                       1:{result.avg_rr_ratio}
                     </p>
                   </div>
 
                   <div
-                    className={`rounded-xl p-4 border ${
+                    className={`rounded-xl p-4 ring-1 ${
                       result.net_pnl >= 0
-                        ? "bg-green-500/10 border-green-500/30"
-                        : "bg-red-500/10 border-red-500/30"
+                        ? "bg-green-500/[0.07] ring-green-500/25"
+                        : "bg-red-500/[0.07] ring-red-500/25"
                     }`}
                   >
                     <p
@@ -351,18 +357,18 @@ export default function BacktestingPage() {
                     >
                       Net PnL
                     </p>
-                    <p className="text-white text-2xl font-bold">
+                    <p className="text-white text-2xl font-bold tabular-nums">
                       {formatCurrency(result.net_pnl)}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
-                <p className="text-yellow-400 text-sm font-medium flex items-center gap-1 mb-1">
+              <div className="bg-amber-500/[0.07] ring-1 ring-amber-500/25 rounded-xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-400" style={{ animationDelay: "80ms", animationFillMode: "backwards" }}>
+                <p className="text-amber-400 text-sm font-medium flex items-center gap-1 mb-1">
                   <AlertTriangle className="h-4 w-4" /> Important Notice
                 </p>
-                <p className="text-yellow-300 text-xs">
+                <p className="text-amber-300/90 text-xs">
                   Past performance does not guarantee future results. Always
                   validate your strategy on a demo account before trading live.
                 </p>
@@ -371,8 +377,10 @@ export default function BacktestingPage() {
           )}
 
           {!result && !loading && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
-              <FlaskConical className="h-12 w-12 text-gray-700 mx-auto mb-4" />
+            <div className="glass-card p-12 text-center">
+              <div className="h-14 w-14 rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.06] flex items-center justify-center mx-auto mb-4">
+                <FlaskConical className="h-6 w-6 text-gray-600" />
+              </div>
               <p className="text-gray-500">
                 Configure your strategy and run a backtest
               </p>

@@ -9,10 +9,11 @@ import {
   getResultColor,
   getPnLColor,
 } from "@/lib/utils-trading";
-import { BookOpen, Plus, X, TrendingUp } from "lucide-react";
+import { BookOpen, Plus, X, TrendingUp, Trash2, Wallet, Target, Gauge } from "lucide-react";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { useStore } from "@/store/useStore";
 import { saveAuth, getToken } from "@/lib/auth";
+import { StatCard } from "@/components/ui/stat-card";
 
 const PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD", "AUD/USD", "USD/CAD"];
 
@@ -99,7 +100,7 @@ export default function JournalPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <BookOpen className="h-6 w-6 text-purple-400" />
@@ -109,7 +110,7 @@ export default function JournalPage() {
             Track and review all your trades
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={async () => {
               if (
@@ -125,8 +126,9 @@ export default function JournalPage() {
                 console.error("Clear all trades error:", err);
               }
             }}
-            className="flex items-center gap-2 bg-red-900/40 hover:bg-red-900/60 text-red-300 font-medium px-4 py-2 rounded-lg transition-colors border border-red-800"
+            className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-medium px-3 py-2 text-sm rounded-xl transition-all duration-200 ring-1 ring-red-500/25 hover:ring-red-500/40 whitespace-nowrap"
           >
+            <Trash2 className="h-3.5 w-3.5" />
             Clear All Trades
           </button>
           <button
@@ -148,13 +150,14 @@ export default function JournalPage() {
                 console.error("Recalculate balance error:", err);
               }
             }}
-            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium px-4 py-2 rounded-lg transition-colors border border-gray-700"
+            className="flex items-center gap-2 bg-white/[0.05] hover:bg-white/[0.09] text-gray-200 font-medium px-3 py-2 text-sm rounded-xl transition-all duration-200 ring-1 ring-white/[0.08] hover:ring-white/[0.15] whitespace-nowrap"
           >
+            <Wallet className="h-3.5 w-3.5" />
             Fix Balance
           </button>
           <button
             onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white font-medium px-3 py-2 text-sm rounded-xl transition-all duration-200 shadow-lg shadow-purple-600/20 whitespace-nowrap"
           >
             <Plus className="h-4 w-4" />
             Add Trade
@@ -165,41 +168,51 @@ export default function JournalPage() {
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-xs mb-1">Total Trades</p>
-            <p className="text-white text-xl font-bold">{stats.total_trades}</p>
-            <p className="text-gray-500 text-xs">{stats.open_trades} open</p>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-xs mb-1">Win Rate</p>
-            <p className="text-green-400 text-xl font-bold">{stats.win_rate}%</p>
-            <p className="text-gray-500 text-xs">
-              {stats.wins}W / {stats.losses}L
-            </p>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-xs mb-1">Total PnL</p>
-            <p className={`text-xl font-bold ${getPnLColor(stats.total_pnl)}`}>
-              {formatCurrency(stats.total_pnl)}
-            </p>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-xs mb-1">Avg R:R</p>
-            <p className="text-white text-xl font-bold">{stats.avg_rr}</p>
-          </div>
+          <StatCard
+            icon={BookOpen}
+            label="Total Trades"
+            value={stats.total_trades}
+            sublabel={`${stats.open_trades} open`}
+            accent="blue"
+            delay={0}
+          />
+          <StatCard
+            icon={Target}
+            label="Win Rate"
+            value={`${stats.win_rate}%`}
+            sublabel={`${stats.wins}W / ${stats.losses}L`}
+            accent="green"
+            valueClassName="text-green-400"
+            delay={60}
+          />
+          <StatCard
+            icon={TrendingUp}
+            label="Total PnL"
+            value={formatCurrency(stats.total_pnl)}
+            accent={stats.total_pnl >= 0 ? "green" : "red"}
+            valueClassName={getPnLColor(stats.total_pnl)}
+            delay={120}
+          />
+          <StatCard
+            icon={Gauge}
+            label="Avg R:R"
+            value={stats.avg_rr}
+            accent="purple"
+            delay={180}
+          />
         </div>
       )}
 
       {/* Filter */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {["", "OPEN", "WIN", "LOSS", "BREAKEVEN"].map((f) => (
           <button
             key={f}
             onClick={() => setFilterResult(f)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
               filterResult === f
-                ? "bg-blue-600 text-white"
-                : "bg-gray-800 text-gray-400 hover:text-white"
+                ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-600/20"
+                : "bg-white/[0.04] text-gray-400 hover:text-white ring-1 ring-white/[0.06] hover:ring-white/[0.12]"
             }`}
           >
             {f || "All"}
@@ -208,14 +221,16 @@ export default function JournalPage() {
       </div>
 
       {/* Trades table */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <div className="glass-card overflow-hidden">
         {filtered.length === 0 ? (
           <div className="text-center py-16">
-            <BookOpen className="h-12 w-12 text-gray-700 mx-auto mb-4" />
+            <div className="h-14 w-14 rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.06] flex items-center justify-center mx-auto mb-4">
+              <BookOpen className="h-6 w-6 text-gray-600" />
+            </div>
             <p className="text-gray-500">No trades found.</p>
             <button
               onClick={() => setShowForm(true)}
-              className="mt-3 text-purple-400 hover:text-purple-300 text-sm"
+              className="mt-3 text-purple-400 hover:text-purple-300 text-sm transition-colors"
             >
               Add your first trade →
             </button>
@@ -224,61 +239,61 @@ export default function JournalPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800 text-gray-400 text-xs">
-                  <th className="text-left px-4 py-3">Pair</th>
-                  <th className="text-left px-4 py-3">Direction</th>
-                  <th className="text-left px-4 py-3">Entry</th>
-                  <th className="text-left px-4 py-3">SL</th>
-                  <th className="text-left px-4 py-3">TP</th>
-                  <th className="text-left px-4 py-3">Lots</th>
-                  <th className="text-left px-4 py-3">Risk</th>
-                  <th className="text-left px-4 py-3">Result</th>
-                  <th className="text-left px-4 py-3">PnL</th>
-                  <th className="text-left px-4 py-3">Date</th>
-                  <th className="text-left px-4 py-3">Actions</th>
+                <tr className="border-b border-white/[0.06] text-gray-500 text-[11px] uppercase tracking-wider">
+                  <th className="text-left px-4 py-3 font-medium">Pair</th>
+                  <th className="text-left px-4 py-3 font-medium">Direction</th>
+                  <th className="text-left px-4 py-3 font-medium">Entry</th>
+                  <th className="text-left px-4 py-3 font-medium">SL</th>
+                  <th className="text-left px-4 py-3 font-medium">TP</th>
+                  <th className="text-left px-4 py-3 font-medium">Lots</th>
+                  <th className="text-left px-4 py-3 font-medium">Risk</th>
+                  <th className="text-left px-4 py-3 font-medium">Result</th>
+                  <th className="text-left px-4 py-3 font-medium">PnL</th>
+                  <th className="text-left px-4 py-3 font-medium">Date</th>
+                  <th className="text-left px-4 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((trade) => (
                   <tr
                     key={trade.id}
-                    className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
+                    className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors"
                   >
                     <td className="px-4 py-3 text-white font-medium">
                       {trade.pair}
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`text-xs font-bold px-2 py-0.5 rounded border ${getDirectionBg(trade.direction)}`}
+                        className={`text-xs font-bold px-2 py-0.5 rounded-md border ${getDirectionBg(trade.direction)}`}
                       >
                         {trade.direction}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-300 font-mono">
+                    <td className="px-4 py-3 text-gray-300 font-mono tabular-nums">
                       {trade.entry_price}
                     </td>
-                    <td className="px-4 py-3 text-red-400 font-mono">
+                    <td className="px-4 py-3 text-red-400 font-mono tabular-nums">
                       {trade.stop_loss}
                     </td>
-                    <td className="px-4 py-3 text-green-400 font-mono">
+                    <td className="px-4 py-3 text-green-400 font-mono tabular-nums">
                       {trade.take_profit}
                     </td>
-                    <td className="px-4 py-3 text-gray-300">
+                    <td className="px-4 py-3 text-gray-300 tabular-nums">
                       {trade.lot_size}
                     </td>
-                    <td className="px-4 py-3 text-gray-300">
+                    <td className="px-4 py-3 text-gray-300 tabular-nums">
                       {formatCurrency(trade.risk_amount)}
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`text-xs font-bold px-2 py-0.5 rounded border ${getResultColor(trade.result)}`}
+                        className={`text-xs font-bold px-2 py-0.5 rounded-md border ${getResultColor(trade.result)}`}
                       >
                         {trade.result}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`font-mono font-bold ${getPnLColor(trade.pnl || 0)}`}
+                        className={`font-mono font-bold tabular-nums ${getPnLColor(trade.pnl || 0)}`}
                       >
                         {trade.pnl !== null
                           ? formatCurrency(trade.pnl)
@@ -383,7 +398,7 @@ function handleClose() {
     return (
       <button
         onClick={() => setShowInput(true)}
-        className="text-xs bg-blue-600/20 text-blue-400 border border-blue-600/30 px-2 py-1 rounded hover:bg-blue-600/30 transition-colors"
+        className="text-xs bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/25 px-2.5 py-1 rounded-full hover:bg-blue-500/20 transition-colors font-medium"
       >
         Close
       </button>
@@ -397,17 +412,17 @@ function handleClose() {
         value={closePrice}
         onChange={(e) => setClosePrice(e.target.value)}
         placeholder="Close price"
-        className="w-24 bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600"
+        className="w-24 bg-white/[0.06] text-white text-xs px-2 py-1 rounded-lg ring-1 ring-white/[0.1] focus:ring-blue-500/50 focus:outline-none placeholder-gray-600"
       />
       <button
         onClick={handleClose}
-        className="text-xs bg-green-600 text-white px-2 py-1 rounded"
+        className="text-xs bg-green-600 hover:bg-green-500 text-white px-2 py-1 rounded-lg transition-colors"
       >
         ✓
       </button>
       <button
         onClick={() => setShowInput(false)}
-        className="text-xs text-gray-400 px-1 py-1"
+        className="text-xs text-gray-500 hover:text-gray-300 px-1 py-1 transition-colors"
       >
         ✕
       </button>
@@ -461,17 +476,17 @@ function AddTradeModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-md">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+      <div className="glass-card p-6 w-full max-w-md animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-white font-bold text-lg">Add Trade</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
+          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4">
+          <div className="bg-red-500/10 ring-1 ring-red-500/30 rounded-xl p-3 mb-4">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
@@ -483,7 +498,7 @@ function AddTradeModal({
               <select
                 value={form.pair}
                 onChange={(e) => update("pair", e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
               >
                 {PAIRS.map((p) => (
                   <option key={p} value={p}>{p}</option>
@@ -495,7 +510,7 @@ function AddTradeModal({
               <select
                 value={form.direction}
                 onChange={(e) => update("direction", e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
               >
                 <option value="BUY">BUY</option>
                 <option value="SELL">SELL</option>
@@ -518,7 +533,7 @@ function AddTradeModal({
                 required
                 value={form[field as keyof typeof form]}
                 onChange={(e) => update(field, e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
               />
             </div>
           ))}
@@ -530,14 +545,14 @@ function AddTradeModal({
               onChange={(e) => update("user_notes", e.target.value)}
               rows={2}
               placeholder="Why did you take this trade?"
-              className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600 resize-none"
+              className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 placeholder-gray-600 resize-none transition-shadow"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-lg transition-colors"
+            className="w-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-purple-600/20"
           >
             {loading ? "Adding..." : "Add Trade"}
           </button>

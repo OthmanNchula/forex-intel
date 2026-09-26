@@ -53,7 +53,7 @@ export default function AlertsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Bell className="h-6 w-6 text-yellow-400" />
@@ -65,7 +65,7 @@ export default function AlertsPage() {
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold px-4 py-2 rounded-lg transition-colors"
+          className="flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-bold px-4 py-2 rounded-xl transition-all duration-200 shadow-lg shadow-yellow-500/20"
         >
           <Plus className="h-4 w-4" />
           New Alert
@@ -73,14 +73,14 @@ export default function AlertsPage() {
       </div>
 
       {success && (
-        <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+        <div className="bg-green-500/10 ring-1 ring-green-500/30 rounded-xl p-3 animate-in fade-in slide-in-from-top-1 duration-300">
           <p className="text-green-400 text-sm">✅ {success}</p>
         </div>
       )}
 
       {/* Create Alert Form */}
       {showForm && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div className="glass-card p-6 animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-300">
           <h2 className="text-white font-semibold mb-4">Create New Alert</h2>
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -91,7 +91,7 @@ export default function AlertsPage() {
                 <select
                   value={pair}
                   onChange={(e) => setPair(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-yellow-500/40 transition-shadow"
                 >
                   {PAIRS.map((p) => (
                     <option key={p} value={p}>{p}</option>
@@ -105,7 +105,7 @@ export default function AlertsPage() {
                 <select
                   value={alertType}
                   onChange={(e) => setAlertType(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-yellow-500/40 transition-shadow"
                 >
                   {ALERT_TYPES.map((t) => (
                     <option key={t.value} value={t.value}>{t.label}</option>
@@ -126,7 +126,7 @@ export default function AlertsPage() {
                   step="0.00001"
                   required
                   placeholder="e.g. 1.09500"
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500 placeholder-gray-600"
+                  className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-yellow-500/40 placeholder-gray-600 transition-shadow"
                 />
               </div>
             )}
@@ -140,12 +140,12 @@ export default function AlertsPage() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="e.g. EUR/USD reached my entry zone"
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500 placeholder-gray-600"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-yellow-500/40 placeholder-gray-600 transition-shadow"
               />
             </div>
 
             {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+              <div className="bg-red-500/10 ring-1 ring-red-500/30 rounded-xl p-3">
                 <p className="text-red-400 text-sm">{error}</p>
               </div>
             )}
@@ -154,14 +154,14 @@ export default function AlertsPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black font-bold py-2.5 rounded-lg transition-colors"
+                className="flex-1 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 disabled:opacity-50 text-black font-bold py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-yellow-500/20"
               >
                 {saving ? "Creating..." : "Create Alert"}
               </button>
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="px-4 py-2.5 bg-gray-800 text-gray-400 hover:text-white rounded-lg transition-colors"
+                className="px-4 py-2.5 bg-white/[0.05] hover:bg-white/[0.09] text-gray-400 hover:text-white rounded-xl transition-all duration-200 ring-1 ring-white/[0.08]"
               >
                 Cancel
               </button>
@@ -172,18 +172,23 @@ export default function AlertsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Active Alerts */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div
+          className="glass-card p-6 animate-in fade-in slide-in-from-bottom-2"
+          style={{ animationDelay: "80ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+        >
           <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
             <Clock className="h-4 w-4 text-blue-400" />
             Active Alerts ({alerts.filter((a) => !a.is_triggered).length})
           </h2>
           {alerts.filter((a) => !a.is_triggered).length === 0 ? (
             <div className="text-center py-8">
-              <Bell className="h-10 w-10 text-gray-700 mx-auto mb-3" />
+              <div className="h-12 w-12 rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.06] flex items-center justify-center mx-auto mb-3">
+                <Bell className="h-5 w-5 text-gray-600" />
+              </div>
               <p className="text-gray-500 text-sm">No active alerts.</p>
               <button
                 onClick={() => setShowForm(true)}
-                className="mt-2 text-yellow-400 hover:text-yellow-300 text-sm"
+                className="mt-2 text-yellow-400 hover:text-yellow-300 text-sm transition-colors"
               >
                 Create your first alert →
               </button>
@@ -204,14 +209,19 @@ export default function AlertsPage() {
         </div>
 
         {/* Triggered Alerts */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div
+          className="glass-card p-6 animate-in fade-in slide-in-from-bottom-2"
+          style={{ animationDelay: "140ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+        >
           <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
             <CheckCircle className="h-4 w-4 text-green-400" />
             Triggered Alerts ({alerts.filter((a) => a.is_triggered).length})
           </h2>
           {alerts.filter((a) => a.is_triggered).length === 0 ? (
             <div className="text-center py-8">
-              <CheckCircle className="h-10 w-10 text-gray-700 mx-auto mb-3" />
+              <div className="h-12 w-12 rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.06] flex items-center justify-center mx-auto mb-3">
+                <CheckCircle className="h-5 w-5 text-gray-600" />
+              </div>
               <p className="text-gray-500 text-sm">No triggered alerts yet.</p>
             </div>
           ) : (
@@ -232,7 +242,10 @@ export default function AlertsPage() {
 
       {/* Recent Notifications */}
       {notifications.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div
+          className="glass-card p-6 animate-in fade-in slide-in-from-bottom-2"
+          style={{ animationDelay: "200ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+        >
           <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
             <Bell className="h-4 w-4 text-yellow-400" />
             Recent Notifications
@@ -241,7 +254,7 @@ export default function AlertsPage() {
             {notifications.map((n, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between bg-gray-800 rounded-lg p-3"
+                className="flex items-center justify-between bg-white/[0.04] ring-1 ring-white/[0.06] rounded-xl p-3"
               >
                 <div>
                   <p className="text-white text-sm">{n.message || n.type}</p>
@@ -259,7 +272,10 @@ export default function AlertsPage() {
       )}
 
       {/* Alert Types Guide */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+      <div
+        className="glass-card p-6 animate-in fade-in slide-in-from-bottom-2"
+        style={{ animationDelay: "260ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+      >
         <h2 className="text-white font-semibold mb-4">Alert Types Guide</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
@@ -288,7 +304,7 @@ export default function AlertsPage() {
               color: "text-green-400",
             },
           ].map(({ type, label, desc, color }) => (
-            <div key={type} className="bg-gray-800 rounded-lg p-4">
+            <div key={type} className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-xl p-4 transition-colors hover:bg-white/[0.06]">
               <p className={`font-medium text-sm mb-1 ${color}`}>{label}</p>
               <p className="text-gray-400 text-xs">{desc}</p>
             </div>
@@ -319,13 +335,13 @@ function AlertItem({
 
   return (
     <div
-      className={`flex items-center justify-between p-3 rounded-lg border ${
+      className={`flex items-center justify-between p-3 rounded-xl ring-1 transition-colors ${
         alert.is_triggered ? "opacity-60" : ""
-      } bg-gray-800 border-gray-700`}
+      } bg-white/[0.03] ring-white/[0.06] hover:bg-white/[0.05]`}
     >
       <div className="flex items-center gap-3">
         <span
-          className={`text-xs font-bold px-2 py-0.5 rounded border ${colorClass}`}
+          className={`text-xs font-bold px-2 py-0.5 rounded-md border ${colorClass}`}
         >
           {alert.alert_type.replace("_", " ")}
         </span>

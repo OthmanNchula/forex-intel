@@ -18,12 +18,12 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen app-shell-bg text-white">
       <PriceFeed />
       <Sidebar />
       <Header />
       <main className="ml-0 md:ml-56 pt-28 md:pt-14 min-h-screen">
-        <div className="p-3 md:p-4 space-y-4">
+        <div className="p-3 md:p-4 space-y-4 max-w-[1600px]">
           <DisclaimerBanner />
           {children}
         </div>

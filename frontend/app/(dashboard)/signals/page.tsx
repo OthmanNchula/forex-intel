@@ -69,7 +69,7 @@ export default function SignalsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Zap className="h-6 w-6 text-yellow-400" />
@@ -81,17 +81,23 @@ export default function SignalsPage() {
         </div>
         <button
           onClick={loadSignals}
-          className="text-gray-400 hover:text-white transition-colors"
+          className="h-9 w-9 flex items-center justify-center rounded-xl text-gray-400 hover:text-white hover:bg-white/[0.06] transition-all duration-200"
         >
-          <RefreshCw className="h-5 w-5" />
+          <RefreshCw className="h-4.5 w-4.5" />
         </button>
       </div>
 
-            {/* Auto Signal Engine Status */}
-      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
-        <div className="flex items-center justify-between">
+      {/* Auto Signal Engine Status */}
+      <div
+        className="glass-card stat-glow-blue p-4 animate-in fade-in slide-in-from-bottom-2"
+        style={{ animationDelay: "60ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+      >
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
+            </span>
             <span className="text-green-400 text-sm font-medium">Auto Signal Engine Active</span>
           </div>
           <span className="text-gray-400 text-xs">Scanning 6 pairs every 15 minutes</span>
@@ -103,14 +109,17 @@ export default function SignalsPage() {
       </div>
 
       {/* Signal Generator */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+      <div
+        className="glass-card p-6 animate-in fade-in slide-in-from-bottom-2"
+        style={{ animationDelay: "120ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+      >
         <h2 className="text-white font-semibold mb-4">Generate New Signal</h2>
         <div className="flex flex-wrap gap-3">
           {/* Pair selector */}
           <select
             value={activePair}
             onChange={(e) => setActivePair(e.target.value)}
-            className="bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+            className="bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
           >
             {PAIRS.map((p) => (
               <option key={p} value={p}>{p}</option>
@@ -118,15 +127,15 @@ export default function SignalsPage() {
           </select>
 
           {/* Timeframe selector */}
-          <div className="flex gap-1">
+          <div className="flex gap-1 bg-white/[0.03] ring-1 ring-white/[0.06] rounded-xl p-1">
             {TIMEFRAMES.map((tf) => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
-                className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   timeframe === tf
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-800 text-gray-400 hover:text-white"
+                    ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md shadow-blue-600/20"
+                    : "text-gray-400 hover:text-white"
                 }`}
               >
                 {tf}
@@ -138,7 +147,7 @@ export default function SignalsPage() {
           <button
             onClick={generateSignal}
             disabled={generating}
-            className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold px-6 py-2.5 rounded-lg transition-colors"
+            className="flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold px-6 py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-yellow-500/20"
           >
             <Zap className="h-4 w-4" />
             {generating ? "Analyzing..." : "Generate Signal"}
@@ -146,7 +155,7 @@ export default function SignalsPage() {
         </div>
 
         {generating && (
-          <div className="mt-4 bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+          <div className="mt-4 bg-blue-500/10 ring-1 ring-blue-500/25 rounded-xl p-4">
             <p className="text-blue-400 text-sm animate-pulse">
               🤖 AI is analyzing {activePair} on {timeframe}...
               fetching market data, computing indicators, generating signal.
@@ -155,7 +164,7 @@ export default function SignalsPage() {
         )}
 
         {error && (
-          <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+          <div className="mt-4 bg-red-500/10 ring-1 ring-red-500/30 rounded-xl p-3">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
@@ -168,36 +177,38 @@ export default function SignalsPage() {
           {loading ? (
             <LoadingSpinner size="sm" />
           ) : signals.length === 0 ? (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center">
+            <div className="glass-card p-6 text-center">
               <p className="text-gray-500 text-sm">No signals yet.</p>
               <p className="text-gray-600 text-xs mt-1">
                 Generate your first signal above.
               </p>
             </div>
           ) : (
-            signals.map((signal) => {
+            signals.map((signal, i) => {
               const conf = getConfidenceLabel(signal.confidence_score || 0);
+              const isSelected = selectedSignal?.id === signal.id;
               return (
                 <button
                   key={signal.id}
                   onClick={() => setSelectedSignal(signal)}
-                  className={`w-full text-left bg-gray-900 border rounded-xl p-4 transition-colors ${
-                    selectedSignal?.id === signal.id
-                      ? "border-blue-500"
-                      : "border-gray-800 hover:border-gray-700"
+                  className={`w-full text-left rounded-xl p-4 transition-all duration-200 animate-in fade-in slide-in-from-left-2 ${
+                    isSelected
+                      ? "bg-gradient-to-r from-blue-600/15 to-purple-600/10 ring-1 ring-blue-500/40 shadow-[0_0_20px_-8px_rgba(59,130,246,0.6)]"
+                      : "bg-white/[0.03] ring-1 ring-white/[0.05] hover:ring-white/[0.1] hover:bg-white/[0.05]"
                   }`}
+                  style={{ animationDelay: `${i * 40}ms`, animationDuration: "400ms", animationFillMode: "backwards" }}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-white font-semibold">{signal.pair}</span>
                     <span
-                      className={`text-xs font-bold px-2 py-0.5 rounded border ${getDirectionBg(signal.direction)}`}
+                      className={`text-xs font-bold px-2 py-0.5 rounded-md border ${getDirectionBg(signal.direction)}`}
                     >
                       {signal.direction}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-400 text-xs">{signal.timeframe}</span>
-                    <span className={`text-xs ${conf.color}`}>
+                    <span className={`text-xs font-medium ${conf.color}`}>
                       {signal.confidence_score}% confidence
                     </span>
                   </div>
@@ -215,8 +226,10 @@ export default function SignalsPage() {
               onDismiss={() => dismissSignal(selectedSignal.id)}
             />
           ) : (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
-              <Zap className="h-12 w-12 text-gray-700 mx-auto mb-4" />
+            <div className="glass-card p-12 text-center">
+              <div className="h-14 w-14 rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.06] flex items-center justify-center mx-auto mb-4">
+                <Zap className="h-6 w-6 text-gray-600" />
+              </div>
               <p className="text-gray-500">
                 Select a signal or generate a new one to see details
               </p>
@@ -238,10 +251,10 @@ function SignalDetail({
   const conf = getConfidenceLabel(signal.confidence_score || 0);
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-6">
+    <div className="glass-card p-6 space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-400">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="text-white text-xl font-bold">{signal.pair}</span>
           <span
             className={`font-bold px-3 py-1 rounded-lg border text-sm ${getDirectionBg(signal.direction)}`}
@@ -262,28 +275,28 @@ function SignalDetail({
         </div>
         <button
           onClick={onDismiss}
-          className="text-gray-500 hover:text-red-400 text-xs border border-gray-700 hover:border-red-400 px-3 py-1.5 rounded-lg transition-colors"
+          className="text-gray-500 hover:text-red-400 text-xs ring-1 ring-white/[0.08] hover:ring-red-400/40 px-3 py-1.5 rounded-lg transition-all duration-200"
         >
           Dismiss
         </button>
       </div>
 
       {/* Confidence */}
-      <div className="bg-gray-800 rounded-xl p-4">
+      <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-xl p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-gray-400 text-sm">AI Confidence</span>
           <span className={`font-bold ${conf.color}`}>
             {signal.confidence_score}% — {conf.label}
           </span>
         </div>
-        <div className="w-full bg-gray-700 rounded-full h-2">
+        <div className="w-full bg-white/[0.06] rounded-full h-2 overflow-hidden">
           <div
-            className={`h-2 rounded-full transition-all ${
+            className={`h-2 rounded-full transition-all duration-700 ease-out ${
               (signal.confidence_score || 0) >= 70
-                ? "bg-green-500"
+                ? "bg-gradient-to-r from-green-500 to-emerald-400"
                 : (signal.confidence_score || 0) >= 50
-                ? "bg-yellow-500"
-                : "bg-red-500"
+                ? "bg-gradient-to-r from-yellow-500 to-amber-400"
+                : "bg-gradient-to-r from-red-500 to-rose-400"
             }`}
             style={{ width: `${signal.confidence_score || 0}%` }}
           />
@@ -293,40 +306,40 @@ function SignalDetail({
       {/* Price levels */}
       {signal.direction !== "NO_TRADE" && (
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+          <div className="bg-blue-500/[0.07] ring-1 ring-blue-500/25 rounded-xl p-4">
             <p className="text-blue-400 text-xs mb-1">Entry Zone</p>
-            <p className="text-white font-mono text-sm">
+            <p className="text-white font-mono text-sm tabular-nums">
               {formatPrice(signal.entry_low || 0, signal.pair)} —{" "}
               {formatPrice(signal.entry_high || 0, signal.pair)}
             </p>
           </div>
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+          <div className="bg-red-500/[0.07] ring-1 ring-red-500/25 rounded-xl p-4">
             <p className="text-red-400 text-xs mb-1">Stop Loss</p>
-            <p className="text-white font-mono text-sm">
+            <p className="text-white font-mono text-sm tabular-nums">
               {formatPrice(signal.stop_loss || 0, signal.pair)}
             </p>
           </div>
-          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+          <div className="bg-green-500/[0.07] ring-1 ring-green-500/25 rounded-xl p-4">
             <p className="text-green-400 text-xs mb-1">Take Profit 1</p>
-            <p className="text-white font-mono text-sm">
+            <p className="text-white font-mono text-sm tabular-nums">
               {formatPrice(signal.take_profit_1 || 0, signal.pair)}
             </p>
           </div>
-          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+          <div className="bg-green-500/[0.07] ring-1 ring-green-500/25 rounded-xl p-4">
             <p className="text-green-400 text-xs mb-1">Take Profit 2</p>
-            <p className="text-white font-mono text-sm">
+            <p className="text-white font-mono text-sm tabular-nums">
               {formatPrice(signal.take_profit_2 || 0, signal.pair)}
             </p>
           </div>
-          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+          <div className="bg-green-500/[0.07] ring-1 ring-green-500/25 rounded-xl p-4">
             <p className="text-green-400 text-xs mb-1">Take Profit 3</p>
-            <p className="text-white font-mono text-sm">
+            <p className="text-white font-mono text-sm tabular-nums">
               {formatPrice(signal.take_profit_3 || 0, signal.pair)}
             </p>
           </div>
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+          <div className="bg-white/[0.04] ring-1 ring-white/[0.08] rounded-xl p-4">
             <p className="text-gray-400 text-xs mb-1">Risk:Reward</p>
-            <p className="text-white font-bold text-lg">
+            <p className="text-white font-bold text-lg tabular-nums">
               1:{signal.rr_ratio?.toFixed(1)}
             </p>
           </div>
@@ -343,16 +356,16 @@ function SignalDetail({
           { label: "ATR", value: signal.atr?.toFixed(5) },
           { label: "Price", value: formatPrice(signal.current_price, signal.pair) },
         ].map(({ label, value }) => (
-          <div key={label} className="bg-gray-800 rounded-lg p-3">
+          <div key={label} className="bg-white/[0.03] ring-1 ring-white/[0.06] rounded-lg p-3">
             <p className="text-gray-500 text-xs mb-1">{label}</p>
-            <p className="text-white font-mono text-xs">{value || "—"}</p>
+            <p className="text-white font-mono text-xs tabular-nums">{value || "—"}</p>
           </div>
         ))}
       </div>
 
       {/* AI Explanation */}
       {signal.ai_explanation && (
-        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+        <div className="bg-blue-500/[0.07] ring-1 ring-blue-500/20 rounded-xl p-4">
           <p className="text-blue-400 text-xs font-semibold mb-2">
             🤖 AI Analysis
           </p>
@@ -364,11 +377,11 @@ function SignalDetail({
 
       {/* Risk Warning */}
       {signal.risk_warning && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
-          <p className="text-yellow-400 text-xs font-semibold mb-2 flex items-center gap-1">
+        <div className="bg-amber-500/[0.07] ring-1 ring-amber-500/25 rounded-xl p-4">
+          <p className="text-amber-400 text-xs font-semibold mb-2 flex items-center gap-1">
             <AlertTriangle className="h-3 w-3" /> Risk Warning
           </p>
-          <p className="text-yellow-300 text-sm">{signal.risk_warning}</p>
+          <p className="text-amber-300/90 text-sm">{signal.risk_warning}</p>
         </div>
       )}
     </div>

@@ -47,14 +47,16 @@ export default function Sidebar() {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="fixed top-0 left-0 right-0 h-14 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 z-50 md:hidden">
+      <div className="fixed top-0 left-0 right-0 h-14 bg-gray-900/80 backdrop-blur-md border-b border-white/[0.06] flex items-center justify-between px-4 z-50 md:hidden">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-yellow-400" />
+          <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <TrendingUp className="h-4 w-4 text-white" />
+          </div>
           <span className="text-white font-bold">Forex Intel</span>
         </div>
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="text-gray-400 hover:text-white"
+          className="text-gray-400 hover:text-white transition-colors"
         >
           {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
@@ -63,22 +65,24 @@ export default function Sidebar() {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-40 md:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden animate-in fade-in duration-200"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-0 h-screen bg-gray-900 border-r border-gray-800 flex flex-col z-50 transition-all duration-300
+        className={`fixed left-0 top-0 h-screen bg-gray-900/80 backdrop-blur-md border-r border-white/[0.06] flex flex-col z-50 transition-all duration-300
           ${mobileOpen ? "w-56 translate-x-0" : "-translate-x-full"}
           md:translate-x-0 md:w-56
         `}
       >
         {/* Logo */}
-        <div className="flex items-center gap-2 px-4 py-5 border-b border-gray-800">
-          <TrendingUp className="h-6 w-6 text-yellow-400 shrink-0" />
-          <span className="text-white font-bold text-lg">Forex Intel</span>
+        <div className="flex items-center gap-2.5 px-4 py-5 border-b border-white/[0.06]">
+          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 shrink-0">
+            <TrendingUp className="h-4.5 w-4.5 text-white" />
+          </div>
+          <span className="text-white font-bold text-lg tracking-tight">Forex Intel</span>
         </div>
 
         {/* Nav */}
@@ -90,13 +94,20 @@ export default function Sidebar() {
                 key={href}
                 href={href}
                 onClick={handleNavClick}
-                className={`flex items-center gap-3 px-4 py-3 mx-2 rounded-lg mb-1 transition-colors ${
+                className={`group relative flex items-center gap-3 px-4 py-2.5 mx-2 rounded-xl mb-1 transition-all duration-200 ${
                   active
-                    ? "bg-blue-600/20 text-blue-400 border border-blue-600/30"
-                    : "text-gray-400 hover:text-white hover:bg-gray-800"
+                    ? "nav-active-pill text-blue-300 ring-1 ring-blue-500/25 shadow-[0_0_20px_-6px_rgba(59,130,246,0.5)]"
+                    : "text-gray-400 hover:text-white hover:bg-white/[0.05]"
                 }`}
               >
-                <Icon className="h-5 w-5 shrink-0" />
+                {active && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-blue-400" />
+                )}
+                <Icon
+                  className={`h-4.5 w-4.5 shrink-0 transition-transform duration-200 ${
+                    active ? "" : "group-hover:scale-110 group-hover:-translate-y-px"
+                  }`}
+                />
                 <span className="text-sm font-medium">{label}</span>
               </Link>
             );
@@ -104,12 +115,12 @@ export default function Sidebar() {
         </nav>
 
         {/* Logout */}
-        <div className="p-2 border-t border-gray-800">
+        <div className="p-2 border-t border-white/[0.06]">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 w-full rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+            className="flex items-center gap-3 px-4 py-2.5 w-full rounded-xl text-gray-400 hover:text-red-400 hover:bg-red-400/10 transition-all duration-200"
           >
-            <LogOut className="h-5 w-5 shrink-0" />
+            <LogOut className="h-4.5 w-4.5 shrink-0" />
             <span className="text-sm font-medium">Logout</span>
           </button>
         </div>

@@ -92,7 +92,7 @@ export default function MarketPage() {
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: "#0f1117" },
+        background: { type: ColorType.Solid, color: "#0b0f19" },
         textColor: "#9ca3af",
       },
       grid: {
@@ -193,40 +193,43 @@ export default function MarketPage() {
   return (
     <div className="space-y-4 pt-2">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
           <TrendingUp className="h-6 w-6 text-blue-400" />
           Market Chart
         </h1>
         <button
           onClick={loadMarketData}
-          className="text-gray-400 hover:text-white transition-colors p-2"
+          className="h-9 w-9 flex items-center justify-center rounded-xl text-gray-400 hover:text-white hover:bg-white/[0.06] transition-all duration-200"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
 
       {/* Controls */}
-      <div className="flex flex-wrap gap-3">
+      <div
+        className="flex flex-wrap gap-3 animate-in fade-in slide-in-from-bottom-2"
+        style={{ animationDelay: "60ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+      >
         <select
           value={activePair}
           onChange={(e) => setActivePair(e.target.value)}
-          className="bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
+          className="bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
         >
           {PAIRS.map((p) => (
             <option key={p} value={p}>{p}</option>
           ))}
         </select>
 
-        <div className="flex gap-1">
+        <div className="flex gap-1 bg-white/[0.03] ring-1 ring-white/[0.06] rounded-xl p-1">
           {TIMEFRAMES.map((tf) => (
             <button
               key={tf}
               onClick={() => setActiveTimeframe(tf)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                 activeTimeframe === tf
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-800 text-gray-400 hover:text-white"
+                  ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md shadow-blue-600/20"
+                  : "text-gray-400 hover:text-white"
               }`}
             >
               {tf}
@@ -237,7 +240,7 @@ export default function MarketPage() {
         <button
           onClick={generateSignal}
           disabled={generating}
-          className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black font-bold px-4 py-2 rounded-lg transition-colors text-sm"
+          className="flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 disabled:opacity-50 text-black font-bold px-4 py-2 rounded-xl transition-all duration-200 shadow-lg shadow-yellow-500/20 text-sm"
         >
           <Zap className="h-4 w-4" />
           {generating ? "Analyzing..." : "Get AI Signal"}
@@ -245,34 +248,37 @@ export default function MarketPage() {
       </div>
 
       {/* Chart */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+      <div
+        className="glass-card overflow-hidden animate-in fade-in slide-in-from-bottom-2"
+        style={{ animationDelay: "120ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] flex-wrap gap-2">
           <div className="flex items-center gap-4">
             <span className="text-white font-bold">{activePair}</span>
             <span className="text-gray-400 text-sm">{activeTimeframe}</span>
             {indicators && (
-              <span className="text-white font-mono text-sm">
+              <span className="text-white font-mono text-sm tabular-nums">
                 {formatPrice(indicators.current_price, activePair)}
               </span>
             )}
           </div>
           <div className="flex items-center gap-4 text-xs text-gray-400">
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-0.5 bg-blue-400 inline-block" />
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-0.5 rounded-full bg-blue-400 inline-block" />
               EMA20
             </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-0.5 bg-yellow-400 inline-block" />
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-0.5 rounded-full bg-yellow-400 inline-block" />
               EMA50
             </span>
             {signal && signal.direction !== "NO_TRADE" && (
               <>
-                <span className="flex items-center gap-1">
-                  <span className="w-3 h-0.5 bg-red-400 inline-block" />
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-0.5 rounded-full bg-red-400 inline-block" />
                   SL
                 </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-3 h-0.5 bg-green-400 inline-block" />
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-0.5 rounded-full bg-green-400 inline-block" />
                   TP1
                 </span>
               </>
@@ -291,36 +297,39 @@ export default function MarketPage() {
       {/* Indicators + Signal row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {indicators && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div
+            className="glass-card p-4 animate-in fade-in slide-in-from-bottom-2"
+            style={{ animationDelay: "180ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+          >
             <h2 className="text-white font-semibold mb-4">
               Technical Indicators
             </h2>
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-gray-800 rounded-lg p-3">
+              <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-lg p-3">
                 <p className="text-gray-400 text-xs mb-1">Trend</p>
                 <p className={`font-bold ${getTrendColor(indicators.trend)}`}>
                   {indicators.trend}
                 </p>
               </div>
-              <div className="bg-gray-800 rounded-lg p-3">
+              <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-lg p-3">
                 <p className="text-gray-400 text-xs mb-1">Volatility</p>
                 <p className="text-white font-bold">{indicators.volatility}</p>
               </div>
-              <div className="bg-gray-800 rounded-lg p-3">
+              <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-lg p-3">
                 <p className="text-gray-400 text-xs mb-1">RSI (14)</p>
                 <p className={`font-bold ${rsiLabel?.color}`}>
                   {indicators.rsi.toFixed(1)} — {rsiLabel?.label}
                 </p>
               </div>
-              <div className="bg-gray-800 rounded-lg p-3">
+              <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-lg p-3">
                 <p className="text-gray-400 text-xs mb-1">MACD Hist</p>
-                <p className={`font-bold font-mono text-sm ${
+                <p className={`font-bold font-mono text-sm tabular-nums ${
                   indicators.macd_hist > 0 ? "text-green-400" : "text-red-400"
                 }`}>
                   {indicators.macd_hist.toFixed(5)}
                 </p>
               </div>
-              <div className="bg-gray-800 rounded-lg p-3">
+              <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-lg p-3">
                 <p className="text-gray-400 text-xs mb-1">EMA Cross</p>
                 <p className={`font-bold ${
                   indicators.ema_cross === "ABOVE" ? "text-green-400" : "text-red-400"
@@ -328,24 +337,24 @@ export default function MarketPage() {
                   EMA20 {indicators.ema_cross} EMA50
                 </p>
               </div>
-              <div className="bg-gray-800 rounded-lg p-3">
+              <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-lg p-3">
                 <p className="text-gray-400 text-xs mb-1">ATR (14)</p>
-                <p className="text-white font-mono text-sm">
+                <p className="text-white font-mono text-sm tabular-nums">
                   {formatPrice(indicators.atr, activePair)}
                 </p>
               </div>
               {indicators.nearest_support && (
-                <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
+                <div className="bg-green-500/[0.07] ring-1 ring-green-500/20 rounded-lg p-3">
                   <p className="text-green-400 text-xs mb-1">Support</p>
-                  <p className="text-white font-mono text-sm">
+                  <p className="text-white font-mono text-sm tabular-nums">
                     {formatPrice(indicators.nearest_support, activePair)}
                   </p>
                 </div>
               )}
               {indicators.nearest_resistance && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                <div className="bg-red-500/[0.07] ring-1 ring-red-500/20 rounded-lg p-3">
                   <p className="text-red-400 text-xs mb-1">Resistance</p>
-                  <p className="text-white font-mono text-sm">
+                  <p className="text-white font-mono text-sm tabular-nums">
                     {formatPrice(indicators.nearest_resistance, activePair)}
                   </p>
                 </div>
@@ -354,7 +363,10 @@ export default function MarketPage() {
           </div>
         )}
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div
+          className="glass-card p-4 animate-in fade-in slide-in-from-bottom-2"
+          style={{ animationDelay: "240ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+        >
           <h2 className="text-white font-semibold mb-4">Latest AI Signal</h2>
           {signal ? (
             <div className="space-y-3">
@@ -371,34 +383,34 @@ export default function MarketPage() {
               </div>
               {signal.direction !== "NO_TRADE" && (
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="bg-gray-800 rounded-lg p-2">
+                  <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-lg p-2">
                     <p className="text-gray-500 text-xs">Entry</p>
-                    <p className="text-white font-mono">
+                    <p className="text-white font-mono tabular-nums">
                       {formatPrice(signal.entry_low || 0, activePair)}
                     </p>
                   </div>
-                  <div className="bg-red-500/10 rounded-lg p-2">
+                  <div className="bg-red-500/[0.07] ring-1 ring-red-500/20 rounded-lg p-2">
                     <p className="text-red-400 text-xs">Stop Loss</p>
-                    <p className="text-white font-mono">
+                    <p className="text-white font-mono tabular-nums">
                       {formatPrice(signal.stop_loss || 0, activePair)}
                     </p>
                   </div>
-                  <div className="bg-green-500/10 rounded-lg p-2">
+                  <div className="bg-green-500/[0.07] ring-1 ring-green-500/20 rounded-lg p-2">
                     <p className="text-green-400 text-xs">TP1</p>
-                    <p className="text-white font-mono">
+                    <p className="text-white font-mono tabular-nums">
                       {formatPrice(signal.take_profit_1 || 0, activePair)}
                     </p>
                   </div>
-                  <div className="bg-gray-800 rounded-lg p-2">
+                  <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-lg p-2">
                     <p className="text-gray-500 text-xs">R:R</p>
-                    <p className="text-white font-bold">
+                    <p className="text-white font-bold tabular-nums">
                       1:{signal.rr_ratio?.toFixed(1)}
                     </p>
                   </div>
                 </div>
               )}
               {signal.ai_explanation && (
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                <div className="bg-blue-500/[0.07] ring-1 ring-blue-500/20 rounded-lg p-3">
                   <p className="text-blue-400 text-xs font-semibold mb-1">
                     🤖 AI Analysis
                   </p>
@@ -416,7 +428,7 @@ export default function MarketPage() {
               <button
                 onClick={generateSignal}
                 disabled={generating}
-                className="mt-3 text-yellow-400 hover:text-yellow-300 text-sm flex items-center gap-1 mx-auto"
+                className="mt-3 text-yellow-400 hover:text-yellow-300 text-sm flex items-center gap-1 mx-auto transition-colors"
               >
                 <Zap className="h-3 w-3" />
                 {generating ? "Generating..." : "Generate Signal"}

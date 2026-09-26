@@ -65,7 +65,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div>
+      <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
           <Settings className="h-6 w-6 text-gray-400" />
           Settings
@@ -77,7 +77,10 @@ export default function SettingsPage() {
 
       <form onSubmit={handleSave} className="space-y-6">
         {/* Profile */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div
+          className="glass-card p-6 animate-in fade-in slide-in-from-bottom-2"
+          style={{ animationDelay: "60ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+        >
           <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
             <User className="h-4 w-4 text-blue-400" />
             Profile
@@ -91,7 +94,7 @@ export default function SettingsPage() {
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-blue-500/50 transition-shadow"
               />
             </div>
             <div>
@@ -102,7 +105,7 @@ export default function SettingsPage() {
                 type="email"
                 value={user?.email || ""}
                 disabled
-                className="w-full bg-gray-800/50 border border-gray-700 text-gray-500 rounded-lg px-4 py-2.5 cursor-not-allowed"
+                className="w-full bg-white/[0.02] ring-1 ring-white/[0.06] text-gray-500 rounded-xl px-4 py-2.5 cursor-not-allowed"
               />
               <p className="text-gray-600 text-xs mt-1">
                 Email cannot be changed
@@ -115,7 +118,7 @@ export default function SettingsPage() {
               <select
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-blue-500/50 transition-shadow"
               >
                 {TIMEZONES.map((tz) => (
                   <option key={tz} value={tz}>{tz}</option>
@@ -126,7 +129,10 @@ export default function SettingsPage() {
         </div>
 
         {/* Trading Settings */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div
+          className="glass-card p-6 animate-in fade-in slide-in-from-bottom-2"
+          style={{ animationDelay: "120ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+        >
           <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
             <Shield className="h-4 w-4 text-green-400" />
             Risk Management
@@ -142,7 +148,7 @@ export default function SettingsPage() {
                 onChange={(e) => setBalance(e.target.value)}
                 min="100"
                 step="100"
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-green-500/50 transition-shadow"
               />
             </div>
             <div>
@@ -156,7 +162,7 @@ export default function SettingsPage() {
                 min="0.1"
                 max="5"
                 step="0.1"
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-green-500/50 transition-shadow"
               />
               <p className="text-gray-600 text-xs mt-1">
                 Recommended: 1-2% per trade
@@ -173,7 +179,7 @@ export default function SettingsPage() {
                 min="1"
                 max="10"
                 step="0.5"
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-green-500/50 transition-shadow"
               />
               <p className="text-gray-600 text-xs mt-1">
                 System will warn you when daily risk exceeds this limit
@@ -183,7 +189,10 @@ export default function SettingsPage() {
         </div>
 
         {/* Watchlist */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div
+          className="glass-card p-6 animate-in fade-in slide-in-from-bottom-2"
+          style={{ animationDelay: "180ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+        >
           <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
             <Bell className="h-4 w-4 text-yellow-400" />
             Watchlist Pairs
@@ -197,10 +206,10 @@ export default function SettingsPage() {
                 key={pair}
                 type="button"
                 onClick={() => togglePair(pair)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
                   selectedPairs.includes(pair)
-                    ? "bg-blue-600/20 text-blue-400 border-blue-600/50"
-                    : "bg-gray-800 text-gray-400 border-gray-700 hover:text-white"
+                    ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md shadow-blue-600/20"
+                    : "bg-white/[0.04] text-gray-400 ring-1 ring-white/[0.08] hover:text-white hover:ring-white/[0.15]"
                 }`}
               >
                 {pair}
@@ -210,7 +219,10 @@ export default function SettingsPage() {
         </div>
 
         {/* Disclaimer */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div
+          className="glass-card p-6 animate-in fade-in slide-in-from-bottom-2"
+          style={{ animationDelay: "240ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+        >
           <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
             <Info className="h-4 w-4 text-gray-400" />
             About Forex Intel
@@ -221,8 +233,8 @@ export default function SettingsPage() {
             <p>AI Engine: Claude claude-sonnet-4-6</p>
             <p>Market Data: Twelve Data API</p>
           </div>
-          <div className="mt-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-            <p className="text-yellow-400 text-xs">
+          <div className="mt-4 bg-amber-500/[0.07] ring-1 ring-amber-500/25 rounded-xl p-3">
+            <p className="text-amber-400/90 text-xs">
               ⚠️ Forex Intel is a decision-support tool only. All signals and
               analysis are NOT financial advice. Always use a demo account
               before trading live. Trading Forex involves significant risk of
@@ -232,13 +244,13 @@ export default function SettingsPage() {
         </div>
 
         {success && (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+          <div className="bg-green-500/10 ring-1 ring-green-500/30 rounded-xl p-3 animate-in fade-in slide-in-from-top-1 duration-300">
             <p className="text-green-400 text-sm">✅ {success}</p>
           </div>
         )}
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+          <div className="bg-red-500/10 ring-1 ring-red-500/30 rounded-xl p-3">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
@@ -246,7 +258,7 @@ export default function SettingsPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-3 rounded-lg transition-colors"
+          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/20"
         >
           {loading ? "Saving..." : "Save Settings"}
         </button>

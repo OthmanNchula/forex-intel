@@ -43,7 +43,7 @@ export default function RiskCalculatorPage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
           <Calculator className="h-6 w-6 text-green-400" />
           Risk Calculator
@@ -55,7 +55,10 @@ export default function RiskCalculatorPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Input form */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div
+          className="glass-card p-6 animate-in fade-in slide-in-from-bottom-2"
+          style={{ animationDelay: "60ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+        >
           <h2 className="text-white font-semibold mb-6">Trade Parameters</h2>
           <form onSubmit={handleCalculate} className="space-y-4">
 
@@ -67,7 +70,7 @@ export default function RiskCalculatorPage() {
               <select
                 value={pair}
                 onChange={(e) => setPair(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-green-500/50 transition-shadow"
               >
                 {PAIRS.map((p) => (
                   <option key={p} value={p}>{p}</option>
@@ -88,7 +91,7 @@ export default function RiskCalculatorPage() {
                   required
                   min="100"
                   step="100"
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-green-500/50 transition-shadow"
                 />
               </div>
               <div>
@@ -103,7 +106,7 @@ export default function RiskCalculatorPage() {
                   min="0.1"
                   max="10"
                   step="0.1"
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-green-500/50 transition-shadow"
                 />
               </div>
             </div>
@@ -120,7 +123,7 @@ export default function RiskCalculatorPage() {
                 required
                 step="0.00001"
                 placeholder="e.g. 1.08500"
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500 placeholder-gray-600"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-green-500/50 placeholder-gray-600 transition-shadow"
               />
             </div>
 
@@ -136,7 +139,7 @@ export default function RiskCalculatorPage() {
                 required
                 step="0.00001"
                 placeholder="e.g. 1.08300"
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500 placeholder-gray-600"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-green-500/50 placeholder-gray-600 transition-shadow"
               />
             </div>
 
@@ -152,12 +155,12 @@ export default function RiskCalculatorPage() {
                 required
                 step="0.00001"
                 placeholder="e.g. 1.09000"
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500 placeholder-gray-600"
+                className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-green-500/50 placeholder-gray-600 transition-shadow"
               />
             </div>
 
             {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+              <div className="bg-red-500/10 ring-1 ring-red-500/30 rounded-xl p-3">
                 <p className="text-red-400 text-sm">{error}</p>
               </div>
             )}
@@ -165,7 +168,7 @@ export default function RiskCalculatorPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all duration-200 shadow-lg shadow-green-600/20 flex items-center justify-center gap-2"
             >
               <Calculator className="h-4 w-4" />
               {loading ? "Calculating..." : "Calculate Risk"}
@@ -178,56 +181,58 @@ export default function RiskCalculatorPage() {
           {result ? (
             <>
               {/* Main results */}
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <div
+                className="glass-card p-6 animate-in fade-in zoom-in-95 duration-400"
+              >
                 <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-green-400" />
                   Calculation Results
                 </h2>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-800 rounded-xl p-4">
+                  <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-xl p-4">
                     <p className="text-gray-400 text-xs mb-1">Lot Size</p>
-                    <p className="text-white text-2xl font-bold">
+                    <p className="text-white text-2xl font-bold tabular-nums">
                       {result.lot_size}
                     </p>
                     <p className="text-gray-500 text-xs mt-1">lots</p>
                   </div>
-                  <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+                  <div className="bg-red-500/[0.07] ring-1 ring-red-500/25 rounded-xl p-4">
                     <p className="text-red-400 text-xs mb-1">Max Risk</p>
-                    <p className="text-white text-2xl font-bold">
+                    <p className="text-white text-2xl font-bold tabular-nums">
                       {formatCurrency(result.risk_amount)}
                     </p>
                     <p className="text-gray-500 text-xs mt-1">
                       {result.risk_pct}% of balance
                     </p>
                   </div>
-                  <div className="bg-gray-800 rounded-xl p-4">
+                  <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-xl p-4">
                     <p className="text-gray-400 text-xs mb-1">SL Distance</p>
-                    <p className="text-white text-2xl font-bold">
+                    <p className="text-white text-2xl font-bold tabular-nums">
                       {result.sl_pips}
                     </p>
                     <p className="text-gray-500 text-xs mt-1">pips</p>
                   </div>
-                  <div className="bg-gray-800 rounded-xl p-4">
+                  <div className="bg-white/[0.04] ring-1 ring-white/[0.06] rounded-xl p-4">
                     <p className="text-gray-400 text-xs mb-1">Pip Value</p>
-                    <p className="text-white text-2xl font-bold">
+                    <p className="text-white text-2xl font-bold tabular-nums">
                       {formatCurrency(result.pip_value)}
                     </p>
                     <p className="text-gray-500 text-xs mt-1">per pip</p>
                   </div>
-                  <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+                  <div className="bg-green-500/[0.07] ring-1 ring-green-500/25 rounded-xl p-4">
                     <p className="text-green-400 text-xs mb-1">
                       Potential Profit
                     </p>
-                    <p className="text-white text-2xl font-bold">
+                    <p className="text-white text-2xl font-bold tabular-nums">
                       {formatCurrency(result.potential_profit)}
                     </p>
                     <p className="text-gray-500 text-xs mt-1">at take profit</p>
                   </div>
                   <div
-                    className={`rounded-xl p-4 border ${
+                    className={`rounded-xl p-4 ring-1 ${
                       result.rr_ratio >= 1.5
-                        ? "bg-green-500/10 border-green-500/30"
-                        : "bg-red-500/10 border-red-500/30"
+                        ? "bg-green-500/[0.07] ring-green-500/25"
+                        : "bg-red-500/[0.07] ring-red-500/25"
                     }`}
                   >
                     <p
@@ -239,7 +244,7 @@ export default function RiskCalculatorPage() {
                     >
                       Risk:Reward
                     </p>
-                    <p className="text-white text-2xl font-bold">
+                    <p className="text-white text-2xl font-bold tabular-nums">
                       1:{result.rr_ratio}
                     </p>
                     <p className="text-gray-500 text-xs mt-1">
@@ -250,23 +255,23 @@ export default function RiskCalculatorPage() {
               </div>
 
               {/* Daily exposure */}
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <div className="glass-card p-4 animate-in fade-in slide-in-from-bottom-2 duration-400" style={{ animationDelay: "80ms", animationFillMode: "backwards" }}>
                 <h3 className="text-white font-medium mb-3">
                   Daily Risk Exposure
                 </h3>
                 <div className="flex items-center justify-between text-sm mb-2">
                   <span className="text-gray-400">Used today</span>
-                  <span className="text-white">
+                  <span className="text-white tabular-nums">
                     {formatCurrency(result.daily_risk_used)} /{" "}
                     {formatCurrency(result.daily_risk_limit)}
                   </span>
                 </div>
-                <div className="w-full bg-gray-700 rounded-full h-2">
+                <div className="w-full bg-white/[0.06] rounded-full h-2 overflow-hidden">
                   <div
-                    className={`h-2 rounded-full ${
+                    className={`h-2 rounded-full transition-all duration-700 ease-out ${
                       result.daily_risk_used / result.daily_risk_limit > 0.8
-                        ? "bg-red-500"
-                        : "bg-blue-500"
+                        ? "bg-gradient-to-r from-red-500 to-rose-400"
+                        : "bg-gradient-to-r from-blue-500 to-purple-500"
                     }`}
                     style={{
                       width: `${Math.min(
@@ -283,12 +288,12 @@ export default function RiskCalculatorPage() {
 
               {/* Warnings */}
               {result.warnings.length > 0 && (
-                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
-                  <p className="text-yellow-400 font-medium text-sm mb-2 flex items-center gap-1">
+                <div className="bg-amber-500/[0.07] ring-1 ring-amber-500/25 rounded-xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-400" style={{ animationDelay: "140ms", animationFillMode: "backwards" }}>
+                  <p className="text-amber-400 font-medium text-sm mb-2 flex items-center gap-1">
                     <AlertTriangle className="h-4 w-4" /> Warnings
                   </p>
                   {result.warnings.map((w, i) => (
-                    <p key={i} className="text-yellow-300 text-sm">
+                    <p key={i} className="text-amber-300/90 text-sm">
                       {w}
                     </p>
                   ))}
@@ -296,8 +301,10 @@ export default function RiskCalculatorPage() {
               )}
             </>
           ) : (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
-              <Calculator className="h-12 w-12 text-gray-700 mx-auto mb-4" />
+            <div className="glass-card p-12 text-center">
+              <div className="h-14 w-14 rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.06] flex items-center justify-center mx-auto mb-4">
+                <Calculator className="h-6 w-6 text-gray-600" />
+              </div>
               <p className="text-gray-500">
                 Fill in the trade parameters and click Calculate
               </p>
