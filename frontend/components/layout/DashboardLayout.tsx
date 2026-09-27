@@ -2,6 +2,7 @@
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import DisclaimerBanner from "@/components/shared/DisclaimerBanner";
+import MarketStatusBanner from "@/components/shared/MarketStatusBanner";
 import { useLivePrice } from "@/hooks/useLivePrice";
 import { useStore } from "@/store/useStore";
 
@@ -25,6 +26,7 @@ export default function DashboardLayout({
       <main className="ml-0 md:ml-56 pt-28 md:pt-14 min-h-screen">
         <div className="p-3 md:p-4 space-y-4 max-w-[1600px]">
           <DisclaimerBanner />
+          <MarketStatusBanner />
           {children}
         </div>
       </main>

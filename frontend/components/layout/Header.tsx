@@ -3,19 +3,27 @@ import { useStore } from "@/store/useStore";
 import { User } from "lucide-react";
 
 export default function Header() {
-  const { user, activePair, prices } = useStore();
+  const { user, activePair, prices, marketOpen } = useStore();
   const currentPrice = prices[activePair];
 
   return (
     <header className="fixed top-14 md:top-0 left-0 md:left-56 right-0 h-14 bg-gray-900/70 backdrop-blur-md border-b border-white/[0.06] flex items-center justify-between px-4 z-40">
       {/* Active pair price */}
       <div className="flex items-center gap-2.5">
-        <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse shrink-0" />
+        <span
+          className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+            marketOpen === false ? "bg-gray-500" : "bg-green-400 animate-pulse"
+          }`}
+          title={marketOpen === false ? "Market closed" : "Market open"}
+        />
         <span className="text-gray-400 text-sm font-medium">{activePair}</span>
         {currentPrice && (
           <span className="text-white font-mono font-semibold tabular-nums">
             {currentPrice.toFixed(5)}
           </span>
+        )}
+        {marketOpen === false && (
+          <span className="text-[11px] text-gray-500 hidden sm:inline">market closed</span>
         )}
       </div>
 

@@ -5,7 +5,7 @@ import { useStore } from "@/store/useStore";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://127.0.0.1:8000";
 
 export function useLivePrice(pairs: string[]) {
-  const { setPrice } = useStore();
+  const { setPrice, setMarketOpen } = useStore();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -32,6 +32,8 @@ export function useLivePrice(pairs: string[]) {
             const data = JSON.parse(event.data);
             if (data.type === "price_update" && data.pair && data.price) {
               setPrice(data.pair, data.price);
+            } else if (data.type === "market_status" && typeof data.isOpen === "boolean") {
+              setMarketOpen(data.isOpen);
             }
           } catch (err) {
             console.error("WS message parse error:", err);

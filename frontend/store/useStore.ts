@@ -20,6 +20,12 @@ interface ForexIntelStore {
   prices: Record<string, number>;
   setPrice: (pair: string, price: number) => void;
 
+  // Forex market open/closed, pushed in real time over the /ws/prices
+  // socket ("market_status" messages). null until the first message
+  // arrives — the UI shouldn't claim "closed" before it actually knows.
+  marketOpen: boolean | null;
+  setMarketOpen: (open: boolean) => void;
+
   // Active signals
   signals: Signal[];
   setSignals: (signals: Signal[]) => void;
@@ -50,6 +56,10 @@ export const useStore = create<ForexIntelStore>((set) => ({
   prices: {},
   setPrice: (pair, price) =>
     set((state) => ({ prices: { ...state.prices, [pair]: price } })),
+
+  // Market open/closed
+  marketOpen: null,
+  setMarketOpen: (open) => set({ marketOpen: open }),
 
   // Signals
   signals: [],

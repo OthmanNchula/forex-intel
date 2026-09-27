@@ -4,6 +4,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, Set
 from app.services.market_data import fetch_quote
 from app.services.alert_service import cache_price
+from app.services.auto_signal_engine import is_market_open
 
 
 class ConnectionManager:
@@ -54,6 +55,21 @@ class ConnectionManager:
         for ws in disconnected:
             self.disconnect(ws)
 
+    async def broadcast_all(self, data: dict):
+        """Broadcast arbitrary data to every connected client, regardless
+        of which pairs they've subscribed to. Used for connection-wide
+        state like market open/closed that every client should know
+        about, not just ones watching a specific pair."""
+        disconnected = []
+        for websocket in list(self.active_connections.keys()):
+            try:
+                await websocket.send_text(json.dumps(data))
+            except Exception:
+                disconnected.append(websocket)
+
+        for ws in disconnected:
+            self.disconnect(ws)
+
     def get_all_subscribed_pairs(self) -> Set[str]:
         """Get all pairs currently being watched across all connections."""
         all_pairs = set()
@@ -70,9 +86,19 @@ async def price_broadcast_loop():
     """
     Background task that fetches prices every 10 seconds
     and broadcasts to all subscribed WebSocket clients.
+
+    Also re-broadcasts the market open/closed state every cycle, so a
+    client that's been connected across a session boundary (e.g. left
+    the tab open from Friday evening into the weekend) finds out the
+    market closed without needing to refresh the page.
     """
     while True:
         try:
+            await manager.broadcast_all({
+                "type": "market_status",
+                "isOpen": is_market_open(),
+            })
+
             pairs = manager.get_all_subscribed_pairs()
             if pairs:
                 for pair in pairs:
@@ -101,6 +127,7 @@ async def handle_price_websocket(websocket: WebSocket):
     Server sends:
         {"type": "price_update", "pair": "EUR/USD", "price": 1.08542}
         {"type": "connected", "message": "Connected to Forex Intel price feed"}
+        {"type": "market_status", "isOpen": true}
         {"type": "error", "message": "..."}
     """
     await manager.connect(websocket)
@@ -110,6 +137,14 @@ async def handle_price_websocket(websocket: WebSocket):
         await manager.send_to(websocket, {
             "type": "connected",
             "message": "Connected to Forex Intel live price feed",
+        })
+
+        # Send current market status immediately so the client doesn't
+        # have to wait for the next price_broadcast_loop cycle (up to
+        # 60s) to know whether the market is open right now.
+        await manager.send_to(websocket, {
+            "type": "market_status",
+            "isOpen": is_market_open(),
         })
 
         while True:
