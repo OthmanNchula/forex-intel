@@ -21,11 +21,6 @@ export default function Header() {
 
       {/* Right side */}
       <div className="flex items-center gap-2">
-        {user?.is_demo && (
-          <span className="text-xs bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/25 px-2.5 py-1 rounded-full font-medium">
-            DEMO
-          </span>
-        )}
         {user && (
           <span className="text-sm text-gray-300 hidden sm:block font-mono tabular-nums">
             ${user.account_balance.toLocaleString()}
