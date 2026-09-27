@@ -13,7 +13,11 @@ from app.services.alert_service import (
     get_daily_ai_call_count,
     get_monthly_ai_call_count,
 )
-from app.services.auto_signal_engine import DAILY_AI_CALL_BUDGET, MONTHLY_AI_CALL_BUDGET
+from app.services.auto_signal_engine import (
+    DAILY_AI_CALL_BUDGET,
+    MONTHLY_AI_CALL_BUDGET,
+    get_signal_expiry_hours,
+)
 from app.middleware.auth_middleware import get_current_user
 from app.models.user import User
 
@@ -100,7 +104,7 @@ async def generate_signal(
         rsi=ai_result.get("rsi"),
         macd_hist=ai_result.get("macd_hist"),
         atr=ai_result.get("atr"),
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=4),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=get_signal_expiry_hours(timeframe)),
     )
     db.add(signal)
     db.commit()

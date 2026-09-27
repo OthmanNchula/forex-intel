@@ -33,6 +33,28 @@ MIN_CONFIDENCE = 62
 MIN_RR_RATIO = 1.5
 SCAN_INTERVAL = 3600  # 1 hour default
 
+# How long a signal stays "active" before it's swept away by
+# expire_old_signals(), scaled to the timeframe it was generated from.
+# A flat expiry (e.g. always 4 hours) doesn't make sense across
+# timeframes: an H4 setup is built on a candle that itself takes 4
+# hours to close, so it should stay valid for a good while past that;
+# an M15 scalp setup goes stale much sooner than 4 hours. Each value
+# here is roughly "a handful of candles" for that timeframe — long
+# enough for the setup to still be relevant, short enough that it
+# doesn't linger once price has clearly moved on.
+SIGNAL_EXPIRY_HOURS = {
+    "M15": 1.5,   # ~6 candles
+    "H1": 5,      # ~5 candles
+    "H4": 18,     # ~4-5 candles
+    "D1": 60,     # ~2.5 days
+}
+DEFAULT_SIGNAL_EXPIRY_HOURS = 4  # fallback for any timeframe not listed above
+
+
+def get_signal_expiry_hours(timeframe: str) -> float:
+    """How many hours a signal generated on this timeframe should stay active."""
+    return SIGNAL_EXPIRY_HOURS.get(timeframe, DEFAULT_SIGNAL_EXPIRY_HOURS)
+
 # There is deliberately NO per-pair/timeframe cooldown here anymore (it
 # was removed at the user's request) — every pair/timeframe that clears
 # the free pre-checks below gets analyzed by the AI every time it's
@@ -459,7 +481,7 @@ async def save_auto_signal(signal_data: dict) -> Optional[Signal]:
             rsi=ai_result.get("rsi"),
             macd_hist=ai_result.get("macd_hist"),
             atr=ai_result.get("atr"),
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=4),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=get_signal_expiry_hours(timeframe)),
             is_active=True,
         )
         db.add(signal)
@@ -519,14 +541,21 @@ async def save_auto_signal(signal_data: dict) -> Optional[Signal]:
 
 
 async def expire_old_signals():
-    """Deactivate signals older than 4 hours."""
+    """
+    Deactivate signals whose per-timeframe expires_at has passed.
+
+    Uses each signal's own expires_at (set at creation from
+    get_signal_expiry_hours(), based on the timeframe it was generated
+    on) rather than a single flat cutoff — an H4 signal and an M15
+    signal created at the same moment expire at different times.
+    """
     db = SessionLocal()
     try:
-        from datetime import timedelta
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=4)
+        now = datetime.now(timezone.utc)
         expired = db.query(Signal).filter(
             Signal.is_active == True,
-            Signal.created_at < cutoff,
+            Signal.expires_at.isnot(None),
+            Signal.expires_at < now,
         ).all()
         for signal in expired:
             signal.is_active = False
