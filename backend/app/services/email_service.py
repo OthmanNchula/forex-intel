@@ -1,6 +1,7 @@
 import httpx
 import os
 from datetime import datetime, timezone
+from sqlalchemy.orm import Session
 
 
 async def send_email(subject: str, html_content: str) -> bool:
@@ -46,8 +47,130 @@ async def send_email(subject: str, html_content: str) -> bool:
         return False
 
 
-async def send_signal_email(signal_data: dict, pair: str, timeframe: str) -> None:
-    """Send a formatted signal notification email."""
+async def send_to_address(to_email: str, subject: str, html_content: str) -> bool:
+    """
+    Send an email to a SPECIFIC address, unlike send_email() above which
+    always sends to the fixed NOTIFICATION_EMAIL list. Used for anything
+    addressed to one particular person rather than the owner's own
+    notification list — e.g. inviting a colleague to try the app.
+    """
+    api_key = os.environ.get("RESEND_API_KEY", "")
+
+    if not api_key or not to_email:
+        print("[Email] RESEND_API_KEY not configured or no recipient given")
+        return False
+
+    payload = {
+        "from": "Forex Intel <onboarding@resend.dev>",
+        "to": [to_email],
+        "subject": subject,
+        "html": html_content,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                "https://api.resend.com/emails",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            if response.status_code == 200:
+                print(f"[Email] ✅ Email sent to {to_email}")
+                return True
+            else:
+                print(f"[Email] ❌ Failed to send to {to_email}: {response.text}")
+                return False
+    except Exception as e:
+        print(f"[Email] Error sending to {to_email}: {e}")
+        return False
+
+
+async def send_invite_email(to_email: str, inviter_name: str) -> bool:
+    """Invite a specific person to try Forex Intel, from a given user."""
+    signup_url = "https://forex-intel-mu.vercel.app/register"
+
+    html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background-color:#0f1117;font-family:Arial,sans-serif;">
+<div style="max-width:600px;margin:0 auto;padding:20px;">
+
+  <div style="background:linear-gradient(135deg,#1B2A4A,#0E3460);border-radius:12px;padding:24px;text-align:center;margin-bottom:20px;">
+    <h1 style="color:#C9A84C;margin:0;font-size:28px;">⚡ FOREX INTEL</h1>
+    <p style="color:#94a3b8;margin:8px 0 0;">AI Trading Intelligence Platform</p>
+  </div>
+
+  <div style="background:#1e293b;border-radius:12px;padding:24px;margin-bottom:20px;">
+    <p style="color:#e2e8f0;font-size:16px;line-height:1.6;margin:0 0 16px;">
+      <strong>{inviter_name}</strong> thinks you'd like to try Forex Intel — an AI-powered
+      Forex trading intelligence platform with live signals, a trade journal, risk calculator,
+      and market analysis.
+    </p>
+    <p style="color:#94a3b8;font-size:14px;line-height:1.6;margin:0;">
+      Sign up for a free demo account below — no real money needed, and it takes less than a minute.
+    </p>
+  </div>
+
+  <div style="text-align:center;margin-bottom:20px;">
+    <a href="{signup_url}"
+       style="background:#C9A84C;color:#1B2A4A;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block;">
+      Create Your Free Account →
+    </a>
+  </div>
+
+  <div style="text-align:center;padding:16px;border-top:1px solid #374151;">
+    <p style="color:#64748b;font-size:12px;margin:0;">
+      ⚠️ Forex Intel is a decision-support tool only. Not financial advice.<br>
+      Trading Forex involves significant risk of loss.<br><br>
+      Forex Intel • AI Trading Intelligence Platform
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
+"""
+
+    subject = f"{inviter_name} invited you to try Forex Intel"
+    return await send_to_address(to_email, subject, html)
+
+
+def get_signal_recipient_emails(db: Session, pair: str) -> list:
+    """
+    Every active, registered user whose watchlist includes this pair (or
+    who hasn't customized their watchlist at all, i.e. still on the
+    default) gets emailed when a signal fires for it. This is what makes
+    signing up for real: someone registers, their email is captured on
+    the User row at that point, and the very next matching signal emails
+    them automatically — no separate opt-in step, no manual "add this
+    person" action needed on your end.
+    """
+    from app.models.user import User
+
+    users = db.query(User).filter(User.is_active == True).all()
+    emails = []
+    for u in users:
+        watchlist = u.preferred_pairs or []
+        if not watchlist or pair in watchlist:
+            emails.append(u.email)
+    return emails
+
+
+async def send_signal_email(signal_data: dict, pair: str, timeframe: str, db: Session) -> None:
+    """
+    Send a formatted signal notification email to every user this
+    signal is relevant to (see get_signal_recipient_emails above) —
+    replaces the old behavior of emailing a single fixed
+    NOTIFICATION_EMAIL address, so this now scales to any number of
+    registered users automatically.
+    """
     direction = signal_data.get("direction", "")
     if direction not in ["BUY", "SELL"]:
         return
@@ -191,7 +314,14 @@ async def send_signal_email(signal_data: dict, pair: str, timeframe: str) -> Non
 """
 
     subject = f"{direction_emoji} Forex Intel: {direction} Signal — {pair} ({confidence}% confidence)"
-    await send_email(subject, html)
+
+    recipients = get_signal_recipient_emails(db, pair)
+    if not recipients:
+        print(f"[Email] No users watching {pair} — signal email not sent")
+        return
+
+    for email in recipients:
+        await send_to_address(email, subject, html)
 
 
 async def send_test_email() -> bool:
