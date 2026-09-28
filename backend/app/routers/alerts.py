@@ -121,3 +121,59 @@ async def test_email(current_user: User = Depends(get_current_user)):
     if success:
         return {"message": "Test email sent to your Gmail successfully!"}
     return {"message": "Failed to send. Check RESEND_API_KEY and NOTIFICATION_EMAIL in Railway variables."}
+
+
+@router.post("/test-signal-email")
+async def test_signal_email(
+    pair: str = "EUR/USD",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Send a FAKE signal email through the real per-user routing path
+    (send_signal_email -> get_signal_recipient_emails), instead of the
+    fixed-address test-email above. This is what actually verifies:
+    every registered, active user whose watchlist includes `pair` (or
+    who hasn't customized their watchlist) receives it — e.g. a
+    colleague who just registered — not just whoever owns
+    NOTIFICATION_EMAIL.
+
+    No signal is saved to the database; this only sends the email.
+    """
+    from app.services.email_service import send_signal_email, get_signal_recipient_emails
+
+    pair = pair.upper().replace("-", "/")
+
+    fake_signal = {
+        "direction": "BUY",
+        "confidence_score": 87,
+        "current_price": 1.08542,
+        "entry_low": 1.08500,
+        "entry_high": 1.08560,
+        "stop_loss": 1.08300,
+        "take_profit_1": 1.08800,
+        "take_profit_2": 1.09000,
+        "take_profit_3": 1.09300,
+        "rr_ratio": 2.1,
+        "ai_explanation": (
+            "TEST SIGNAL — this is not a real trade setup. Sent to verify "
+            "email delivery and per-user routing only."
+        ),
+        "risk_warning": "This is a test message, not a real signal. No action needed.",
+    }
+
+    recipients = get_signal_recipient_emails(db, pair)
+    if not recipients:
+        return {
+            "sent": False,
+            "message": f"No active users are watching {pair} (check preferred_pairs), so nobody would have received this.",
+        }
+
+    await send_signal_email(fake_signal, pair, "H1", db)
+
+    return {
+        "sent": True,
+        "pair": pair,
+        "recipients": recipients,
+        "message": f"Test signal email sent to {len(recipients)} recipient(s). Check inboxes (and spam folders).",
+    }
