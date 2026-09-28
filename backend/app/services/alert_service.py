@@ -2,7 +2,20 @@ import json
 from datetime import datetime, timezone
 from typing import Optional
 
-# Try to connect to Redis, but make it optional
+# Try to connect to Redis, but make it optional.
+#
+# IMPORTANT: Redis(url=..., token=...) below does NOT actually contact
+# Upstash — it's a lazy REST client that just stores the credentials, so
+# this constructor call succeeds even when UPSTASH_REDIS_REST_URL/TOKEN
+# are wrong, stale, or point at a deleted database. That previously made
+# REDIS_AVAILABLE = True unconditionally, while every real read/write
+# elsewhere in this file silently caught its own exception and returned
+# 0/None with no log line — so a broken Redis connection was completely
+# invisible (the AI call budget counters would just always read 0,
+# looking like "no calls made" instead of "can't reach Redis"). The
+# round-trip below actually exercises the connection at startup so a
+# real failure shows up loudly in the Railway logs immediately, instead
+# of silently disabling AI spend tracking.
 try:
     from upstash_redis import Redis
     from app.config import settings
@@ -15,11 +28,38 @@ try:
         url=redis_url,
         token=settings.UPSTASH_REDIS_REST_TOKEN,
     )
+
+    # Real round-trip, not just constructing the client — this is what
+    # actually proves Upstash is reachable with these credentials. Uses
+    # setex (not set(..., ex=...)) to match the call style already
+    # proven to work elsewhere in this file (see cache_price below).
+    _healthcheck_key = "healthcheck:startup"
+    redis.setex(_healthcheck_key, 60, "ok")
+    if redis.get(_healthcheck_key) != "ok":
+        raise ConnectionError("Redis set/get round-trip did not return the expected value")
+
     REDIS_AVAILABLE = True
+    print("[Redis] ✅ Connected — startup round-trip succeeded")
 except Exception as e:
-    print(f"Redis not available: {e}")
+    print(f"[Redis] ❌ NOT available — AI call budget tracking, signal caching, and "
+          f"rate limits will silently no-op until this is fixed: {e}")
     redis = None
     REDIS_AVAILABLE = False
+
+
+def is_redis_healthy() -> bool:
+    """
+    Re-checks the connection right now (not just the cached startup
+    result), so /health can report LIVE status rather than whatever
+    REDIS_AVAILABLE was set to when the app booted.
+    """
+    if redis is None:
+        return False
+    try:
+        redis.setex("healthcheck:live", 30, "ok")
+        return redis.get("healthcheck:live") == "ok"
+    except Exception:
+        return False
 
 PRICE_CACHE_PREFIX = "price:"
 SIGNAL_CACHE_PREFIX = "signal:"
@@ -231,7 +271,9 @@ def get_monthly_ai_call_count() -> int:
         key = f"{AI_CALL_BUDGET_PREFIX}{_current_month_key()}"
         value = redis.get(key)
         return int(value) if value else 0
-    except Exception:
+    except Exception as e:
+        print(f"[Redis] ❌ get_monthly_ai_call_count failed — usage widget will "
+              f"under-report: {e}")
         return 0
 
 
@@ -275,12 +317,45 @@ def increment_monthly_ai_call_count() -> int:
             # comes around next year, without needing a cron to reset it.
             redis.expire(key, 40 * 86400)
         return new_count
-    except Exception:
+    except Exception as e:
+        print(f"[Redis] ❌ increment_monthly_ai_call_count failed — this AI call "
+              f"will NOT count against the monthly budget: {e}")
         return 0
 
 
 def _current_day_key() -> str:
     return datetime.now(timezone.utc).date().isoformat()
+
+
+INVITE_COUNT_PREFIX = "invites:"
+
+
+def get_invite_count_today(user_id: str) -> int:
+    """How many invite emails this user has sent today (UTC)."""
+    if not REDIS_AVAILABLE or redis is None:
+        return 0
+    try:
+        key = f"{INVITE_COUNT_PREFIX}{user_id}:{_current_day_key()}"
+        value = redis.get(key)
+        return int(value) if value else 0
+    except Exception:
+        return 0
+
+
+def increment_invite_count(user_id: str) -> int:
+    """Record one invite email sent by this user today. Expires in 2
+    days so stale keys don't pile up in Redis, same as the AI call
+    budget counters above."""
+    if not REDIS_AVAILABLE or redis is None:
+        return 0
+    try:
+        key = f"{INVITE_COUNT_PREFIX}{user_id}:{_current_day_key()}"
+        new_count = redis.incr(key)
+        if new_count == 1:
+            redis.expire(key, 2 * 86400)
+        return new_count
+    except Exception:
+        return 0
 
 
 def get_daily_ai_call_count() -> int:
@@ -291,7 +366,9 @@ def get_daily_ai_call_count() -> int:
         key = f"{AI_CALL_BUDGET_PREFIX}day:{_current_day_key()}"
         value = redis.get(key)
         return int(value) if value else 0
-    except Exception:
+    except Exception as e:
+        print(f"[Redis] ❌ get_daily_ai_call_count failed — usage widget will "
+              f"under-report: {e}")
         return 0
 
 
@@ -328,7 +405,9 @@ def increment_daily_ai_call_count() -> int:
         if new_count == 1:
             redis.expire(key, 2 * 86400)
         return new_count
-    except Exception:
+    except Exception as e:
+        print(f"[Redis] ❌ increment_daily_ai_call_count failed — this AI call "
+              f"will NOT count against today's budget: {e}")
         return 0
 
 

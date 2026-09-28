@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from app.config import settings
 from app.database import engine, Base
-from app.routers import auth, market, analysis, risk, journal, alerts
+from app.routers import auth, market, analysis, risk, journal, alerts, invites
 from app.websocket.price_feed import handle_price_websocket, price_broadcast_loop
 
 
@@ -63,6 +63,7 @@ app.include_router(analysis.router)
 app.include_router(risk.router)
 app.include_router(journal.router)
 app.include_router(alerts.router)
+app.include_router(invites.router)
 
 
 @app.websocket("/ws/prices")
@@ -82,4 +83,13 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    from app.services.alert_service import is_redis_healthy
+
+    redis_ok = is_redis_healthy()
+    return {
+        "status": "healthy",
+        # If this is false, the AI call budget counters, signal cache,
+        # and invite rate-limit are all silently no-op'ing — see the
+        # [Redis] log lines around startup for why.
+        "redis_connected": redis_ok,
+    }
