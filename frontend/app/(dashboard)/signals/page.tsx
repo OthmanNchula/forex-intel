@@ -103,7 +103,7 @@ export default function SignalsPage() {
           <span className="text-gray-400 text-xs">Scanning 6 pairs every 15 minutes</span>
         </div>
         <p className="text-gray-400 text-xs mt-2">
-          Signals appear automatically when confidence ≥ 70% and R:R ≥ 1.5 on H1 or H4 timeframes.
+          Signals appear automatically when confidence ≥ 62% and R:R ≥ 1.5 on H1 or H4 timeframes.
           You can also generate signals manually using the form above.
         </p>
       </div>
