@@ -118,6 +118,33 @@ def get_stale_price(pair: str) -> Optional[float]:
         return None
 
 
+def redis_heartbeat() -> None:
+    """
+    Touch Redis so Upstash's free-tier "delete after 14 days of zero
+    commands" policy never triggers — this is what silently deleted the
+    database once already (DNS for its REST URL went dead as a result,
+    which is what caused the earlier deploy/signal outage).
+
+    Real traffic (price caching, AI budget counters) normally keeps
+    Redis busy, but it can go quiet for a stretch — market closed over a
+    weekend/holiday, nobody with the app open, no signals firing. This
+    is called at the top of every scan cycle (run_signal_scan_cycle),
+    which fires every ~15 min via the Railway Cron job regardless of
+    market state or user activity, so Redis is touched far more often
+    than the 14-day threshold requires. Cheap — one SETEX call.
+    """
+    if not REDIS_AVAILABLE or redis is None:
+        return
+    try:
+        redis.setex(
+            "heartbeat:keepalive",
+            86400,  # 24h TTL — just needs to exist, value itself is unused
+            datetime.now(timezone.utc).isoformat(),
+        )
+    except Exception as e:
+        print(f"[Redis] ❌ Heartbeat write failed: {e}")
+
+
 def cache_signal(pair: str, timeframe: str, signal_data: dict, expire_seconds: int = 300) -> None:
     if not REDIS_AVAILABLE or redis is None:
         return

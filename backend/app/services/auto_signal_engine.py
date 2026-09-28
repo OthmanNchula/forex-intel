@@ -13,6 +13,7 @@ from app.services.alert_service import (
     increment_monthly_ai_call_count,
     is_within_daily_ai_call_budget,
     increment_daily_ai_call_count,
+    redis_heartbeat,
 )
 
 # Pairs and timeframes to scan
@@ -588,6 +589,10 @@ async def run_signal_scan_cycle() -> dict:
     more than once while a session is still "active".
     """
     now = datetime.now(timezone.utc)
+
+    # Keep Redis from ever going idle long enough to be auto-deleted —
+    # runs on every cycle regardless of market state, see redis_heartbeat().
+    redis_heartbeat()
 
     if not is_market_open():
         print(f"[AutoSignal] 😴 Market closed at {now.strftime('%H:%M UTC')}")
