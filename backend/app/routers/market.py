@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.config import settings
 from app.services.market_data import fetch_ohlcv, fetch_quote, fetch_multiple_quotes
 from app.services.indicator_engine import compute_all_indicators
-from app.services.alert_service import cache_price, get_cached_price
+from app.services.alert_service import cache_price
 from app.middleware.auth_middleware import get_current_user
 from app.models.user import User
 
@@ -23,23 +23,16 @@ async def get_quote(
     pair: str,
     current_user: User = Depends(get_current_user),
 ):
-    """Get latest price for a pair. Checks Redis cache first."""
+    """Get latest price for a pair. fetch_quote() checks Redis cache
+    first and falls back to a stale cache on rate-limit/failure, so no
+    extra caching logic is needed here."""
     pair = pair.upper().replace("-", "/")
 
-    # Check cache first
-    cached = get_cached_price(pair)
-    if cached:
-        return {"pair": pair, "price": cached, "source": "cache"}
-
-    # Fetch from Twelve Data
     quote = await fetch_quote(pair)
     if not quote:
         raise HTTPException(status_code=404, detail=f"Could not fetch price for {pair}")
 
-    # Cache it
-    cache_price(pair, quote["price"])
-
-    return {**quote, "source": "live"}
+    return quote
 
 
 @router.get("/quotes/all")

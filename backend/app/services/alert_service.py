@@ -88,6 +88,36 @@ def get_cached_price(pair: str) -> Optional[float]:
         return None
 
 
+# Longer-lived fallback cache, separate from the 30s "fresh" price cache
+# above. Twelve Data's free tier rate-limits at a handful of requests per
+# minute, which several pairs fetched close together (e.g. a dashboard
+# load hitting /quotes/all for all 7 SUPPORTED_PAIRS) can exceed, coming
+# back as 429s. Rather than surfacing nothing for those pairs, we keep a
+# 10-minute-old fallback so the UI can still show a recent price.
+STALE_PRICE_CACHE_PREFIX = "price_stale:"
+
+
+def cache_stale_price(pair: str, price: float, expire_seconds: int = 600) -> None:
+    if not REDIS_AVAILABLE or redis is None:
+        return
+    try:
+        key = f"{STALE_PRICE_CACHE_PREFIX}{pair.replace('/', '_')}"
+        redis.setex(key, expire_seconds, str(price))
+    except Exception:
+        pass
+
+
+def get_stale_price(pair: str) -> Optional[float]:
+    if not REDIS_AVAILABLE or redis is None:
+        return None
+    try:
+        key = f"{STALE_PRICE_CACHE_PREFIX}{pair.replace('/', '_')}"
+        value = redis.get(key)
+        return float(value) if value else None
+    except Exception:
+        return None
+
+
 def cache_signal(pair: str, timeframe: str, signal_data: dict, expire_seconds: int = 300) -> None:
     if not REDIS_AVAILABLE or redis is None:
         return

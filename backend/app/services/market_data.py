@@ -1,7 +1,14 @@
+import asyncio
 import httpx
 import pandas as pd
 from typing import Optional
 from app.config import settings
+from app.services.alert_service import (
+    get_cached_price,
+    cache_price,
+    get_stale_price,
+    cache_stale_price,
+)
 
 BASE_URL = "https://api.twelvedata.com"
 
@@ -79,8 +86,18 @@ async def fetch_ohlcv(
 async def fetch_quote(pair: str) -> Optional[dict]:
     """
     Fetch the latest price quote for a pair.
-    Returns dict with bid, ask, price, change, change_percent.
+
+    Checks the 30s Redis price cache first, so repeat calls for the same
+    pair within that window (multiple users, the websocket broadcast
+    loop, and /quotes/all all ask for the same pairs) don't each hit
+    Twelve Data. On a rate-limit (429) or other failure, falls back to a
+    longer-lived "stale" cache (up to 10 min old) instead of returning
+    nothing, so the UI still shows a recent price rather than a gap.
     """
+    cached = get_cached_price(pair)
+    if cached is not None:
+        return {"pair": pair, "price": cached, "source": "cache"}
+
     symbol = PAIR_MAP.get(pair, pair)
 
     params = {
@@ -97,20 +114,43 @@ async def fetch_quote(pair: str) -> Optional[dict]:
             if "price" not in data:
                 return None
 
-            return {
-                "pair": pair,
-                "price": float(data["price"]),
-            }
+            price = float(data["price"])
+            cache_price(pair, price)        # fresh cache, 30s
+            cache_stale_price(pair, price)  # fallback cache, 10min
 
+            return {"pair": pair, "price": price, "source": "live"}
+
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code == 429:
+                print(f"[MarketData] Rate limited by Twelve Data for {pair} — using stale cache if available")
+            else:
+                print(f"Error fetching quote for {pair}: {e}")
+            stale = get_stale_price(pair)
+            if stale is not None:
+                return {"pair": pair, "price": stale, "source": "stale"}
+            return None
         except Exception as e:
             print(f"Error fetching quote for {pair}: {e}")
+            stale = get_stale_price(pair)
+            if stale is not None:
+                return {"pair": pair, "price": stale, "source": "stale"}
             return None
 
 
 async def fetch_multiple_quotes(pairs: list) -> dict:
-    """Fetch latest prices for multiple pairs at once."""
+    """
+    Fetch latest prices for multiple pairs.
+
+    fetch_quote() is cache-aware, so pairs already cached from another
+    request resolve instantly with no API call. For pairs that do need a
+    live fetch, calls are staggered slightly so a burst across several
+    uncached pairs (e.g. right after the cache expires) doesn't itself
+    trip Twelve Data's rate limit.
+    """
     results = {}
-    for pair in pairs:
+    for i, pair in enumerate(pairs):
+        if i > 0:
+            await asyncio.sleep(0.25)
         quote = await fetch_quote(pair)
         if quote:
             results[pair] = quote
