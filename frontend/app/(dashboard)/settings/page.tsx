@@ -1,9 +1,9 @@
 "use client";
 import { useState } from "react";
 import { useStore } from "@/store/useStore";
-import { authApi } from "@/lib/api";
+import { authApi, invitesApi } from "@/lib/api";
 import { saveAuth } from "@/lib/auth";
-import { Settings, User, Shield, Bell, Info } from "lucide-react";
+import { Settings, User, Shield, Bell, Info, UserPlus } from "lucide-react";
 
 const PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD", "AUD/USD", "USD/CAD", "USD/CHF"];
 const TIMEZONES = [
@@ -28,6 +28,12 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
+
+  // Invite a colleague
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState("");
+  const [inviteError, setInviteError] = useState("");
 
   function togglePair(pair: string) {
     setSelectedPairs((prev) =>
@@ -60,6 +66,23 @@ export default function SettingsPage() {
       setError(err.response?.data?.detail || "Failed to save settings.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setInviteLoading(true);
+    setInviteError("");
+    setInviteMessage("");
+    try {
+      await invitesApi.sendInvite(inviteEmail);
+      setInviteMessage(`Invite sent to ${inviteEmail}!`);
+      setInviteEmail("");
+      setTimeout(() => setInviteMessage(""), 4000);
+    } catch (err: any) {
+      setInviteError(err.response?.data?.detail || "Failed to send invite.");
+    } finally {
+      setInviteLoading(false);
     }
   }
 
@@ -121,7 +144,7 @@ export default function SettingsPage() {
                 className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-blue-500/50 transition-shadow"
               >
                 {TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>{tz}</option>
+                  <option key={tz} value={tz} className="bg-[#1e293b] text-white">{tz}</option>
                 ))}
               </select>
             </div>
@@ -263,6 +286,43 @@ export default function SettingsPage() {
           {loading ? "Saving..." : "Save Settings"}
         </button>
       </form>
+
+      {/* Invite a Colleague */}
+      <div
+        className="glass-card p-6 animate-in fade-in slide-in-from-bottom-2"
+        style={{ animationDelay: "300ms", animationDuration: "500ms", animationFillMode: "backwards" }}
+      >
+        <h2 className="text-white font-semibold mb-1 flex items-center gap-2">
+          <UserPlus className="h-4 w-4 text-purple-400" />
+          Invite a Colleague
+        </h2>
+        <p className="text-gray-400 text-xs mb-4">
+          Send someone an email invite to try Forex Intel with their own free demo account.
+        </p>
+        <form onSubmit={handleInvite} className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="email"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+            required
+            placeholder="colleague@example.com"
+            className="flex-1 bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 placeholder-gray-500 focus:outline-none focus:ring-purple-500/50 transition-shadow"
+          />
+          <button
+            type="submit"
+            disabled={inviteLoading}
+            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-5 py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-purple-600/20 whitespace-nowrap"
+          >
+            {inviteLoading ? "Sending..." : "Send Invite"}
+          </button>
+        </form>
+        {inviteMessage && (
+          <p className="text-green-400 text-sm mt-3">✅ {inviteMessage}</p>
+        )}
+        {inviteError && (
+          <p className="text-red-400 text-sm mt-3">{inviteError}</p>
+        )}
+      </div>
     </div>
   );
 }

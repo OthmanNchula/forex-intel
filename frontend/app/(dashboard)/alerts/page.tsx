@@ -94,7 +94,7 @@ export default function AlertsPage() {
                   className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-yellow-500/40 transition-shadow"
                 >
                   {PAIRS.map((p) => (
-                    <option key={p} value={p}>{p}</option>
+                    <option key={p} value={p} className="bg-[#1e293b] text-white">{p}</option>
                   ))}
                 </select>
               </div>
@@ -108,7 +108,7 @@ export default function AlertsPage() {
                   className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-yellow-500/40 transition-shadow"
                 >
                   {ALERT_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
+                    <option key={t.value} value={t.value} className="bg-[#1e293b] text-white">{t.label}</option>
                   ))}
                 </select>
               </div>

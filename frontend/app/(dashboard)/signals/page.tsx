@@ -122,7 +122,7 @@ export default function SignalsPage() {
             className="bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
           >
             {PAIRS.map((p) => (
-              <option key={p} value={p}>{p}</option>
+              <option key={p} value={p} className="bg-[#1e293b] text-white">{p}</option>
             ))}
           </select>
 

@@ -73,7 +73,7 @@ export default function RiskCalculatorPage() {
                 className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-green-500/50 transition-shadow"
               >
                 {PAIRS.map((p) => (
-                  <option key={p} value={p}>{p}</option>
+                  <option key={p} value={p} className="bg-[#1e293b] text-white">{p}</option>
                 ))}
               </select>
             </div>

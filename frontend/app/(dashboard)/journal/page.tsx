@@ -566,7 +566,7 @@ function TradeFormModal({
                 className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
               >
                 {PAIRS.map((p) => (
-                  <option key={p} value={p}>{p}</option>
+                  <option key={p} value={p} className="bg-[#1e293b] text-white">{p}</option>
                 ))}
               </select>
             </div>
@@ -577,8 +577,8 @@ function TradeFormModal({
                 onChange={(e) => update("direction", e.target.value)}
                 className="w-full bg-white/[0.05] ring-1 ring-white/[0.1] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-blue-500/50 transition-shadow"
               >
-                <option value="BUY">BUY</option>
-                <option value="SELL">SELL</option>
+                <option value="BUY" className="bg-[#1e293b] text-white">BUY</option>
+                <option value="SELL" className="bg-[#1e293b] text-white">SELL</option>
               </select>
             </div>
           </div>
