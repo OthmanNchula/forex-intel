@@ -353,17 +353,55 @@ You respond ONLY with valid JSON — no markdown, no explanation outside the JSO
             }
 
         fallback = calculate_levels_from_indicators(indicators, direction)
+        price = indicators["current_price"]
+
+        stop_loss     = ai_result.get("stop_loss")     or fallback["stop_loss"]
+        take_profit_1 = ai_result.get("take_profit_1") or fallback["take_profit_1"]
+        take_profit_2 = ai_result.get("take_profit_2") or fallback["take_profit_2"]
+        take_profit_3 = ai_result.get("take_profit_3") or fallback["take_profit_3"]
+
+        # Sanity-check the levels actually make sense for this direction
+        # BEFORE trusting them — a BUY's stop must be below the current
+        # price with all targets above it (SELL is the mirror image). If
+        # the AI's own numbers fail this (or the AI/fallback mix above
+        # produced a mismatched pair), don't ship a directionally-broken
+        # signal — use the fully self-consistent ATR fallback instead,
+        # never a mix of the two sources.
+        if direction == "BUY":
+            levels_valid = stop_loss < price < take_profit_1 <= take_profit_2 <= take_profit_3
+        else:
+            levels_valid = stop_loss > price > take_profit_1 >= take_profit_2 >= take_profit_3
+
+        if not levels_valid:
+            print(
+                f"[AI] Invalid {direction} levels from model (price={price}, "
+                f"SL={stop_loss}, TP1={take_profit_1}, TP2={take_profit_2}, TP3={take_profit_3}) "
+                f"— using ATR-based fallback levels instead."
+            )
+            stop_loss     = fallback["stop_loss"]
+            take_profit_1 = fallback["take_profit_1"]
+            take_profit_2 = fallback["take_profit_2"]
+            take_profit_3 = fallback["take_profit_3"]
+
+        # ALWAYS recompute rr_ratio ourselves from the final stop_loss/
+        # take_profit_2 — never trust the AI's self-reported number,
+        # since a mismatch between its claimed rr_ratio and its actual
+        # SL/TP prices is exactly what let "risk more than reward"
+        # signals slip past the MIN_RR_RATIO filter undetected.
+        risk = abs(price - stop_loss)
+        reward = abs(take_profit_2 - price)
+        verified_rr = round(reward / risk, 2) if risk > 0 else 0
 
         return {
             "direction": direction,
-            "current_price": indicators["current_price"],
+            "current_price": price,
             "entry_low":      ai_result.get("entry_low")      or fallback["entry_low"],
             "entry_high":     ai_result.get("entry_high")     or fallback["entry_high"],
-            "stop_loss":      ai_result.get("stop_loss")      or fallback["stop_loss"],
-            "take_profit_1":  ai_result.get("take_profit_1")  or fallback["take_profit_1"],
-            "take_profit_2":  ai_result.get("take_profit_2")  or fallback["take_profit_2"],
-            "take_profit_3":  ai_result.get("take_profit_3")  or fallback["take_profit_3"],
-            "rr_ratio":       ai_result.get("rr_ratio")       or fallback["rr_ratio"],
+            "stop_loss":      stop_loss,
+            "take_profit_1":  take_profit_1,
+            "take_profit_2":  take_profit_2,
+            "take_profit_3":  take_profit_3,
+            "rr_ratio":       verified_rr,
             "confidence_score": ai_result.get("confidence_score", 50),
             "ai_explanation": ai_result.get("explanation", "Analysis completed."),
             "risk_warning":   ai_result.get("risk_warning", "⚠️ Not financial advice. Always use proper risk management."),

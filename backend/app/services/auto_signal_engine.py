@@ -305,15 +305,27 @@ def generate_technical_fallback_signal(pair: str, timeframe: str, indicators: di
 
 
 def signal_already_exists(db: Session, pair: str, timeframe: str) -> bool:
-    """Check if a recent active signal exists for this pair/timeframe."""
-    from datetime import timedelta
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=4)
+    """
+    Check if an active signal already exists for this pair/timeframe.
+
+    Relies solely on is_active — which expire_old_signals() keeps
+    accurate per-signal using each signal's own expires_at (see
+    get_signal_expiry_hours: 1.5h for M15, 5h for H1, 18h for H4, 60h
+    for D1) — rather than a second, independent time window here.
+
+    This used to also require created_at within a flat 4-hour cutoff,
+    which was fine for M15/H1 (their real expiry is under 4h anyway)
+    but actively wrong for H4 (18h) and D1 (60h): once more than 4
+    hours had passed since an H4/D1 signal was created, this check
+    would stop finding it — even though it was still genuinely active
+    — and let a duplicate signal be saved for the same pair/timeframe
+    on top of one that hadn't expired yet.
+    """
     existing = db.query(Signal).filter(
         Signal.pair == pair,
         Signal.timeframe == timeframe,
         Signal.is_active == True,
         Signal.direction != "NO_TRADE",
-        Signal.created_at >= cutoff,
     ).first()
     return existing is not None
 
@@ -427,7 +439,11 @@ async def analyze_pair(pair: str, timeframe: str) -> Optional[dict]:
             print(f"[AutoSignal] {pair} {timeframe} — confidence {confidence}% below {MIN_CONFIDENCE}%")
             return None
 
-        if rr_ratio and rr_ratio < MIN_RR_RATIO:
+        # `rr_ratio and rr_ratio < MIN_RR_RATIO` would silently SKIP this
+        # check when rr_ratio is exactly 0 (0 is falsy in Python) — a
+        # degenerate signal with a meaningless R:R would then slip past
+        # the filter instead of being rejected. `is not None` catches it.
+        if rr_ratio is not None and rr_ratio < MIN_RR_RATIO:
             print(f"[AutoSignal] {pair} {timeframe} — R:R {rr_ratio} below {MIN_RR_RATIO}")
             return None
 
