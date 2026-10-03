@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -88,3 +88,28 @@ def get_current_user(
         raise credentials_exception
 
     return user
+
+
+def verify_executor_key(x_executor_key: Optional[str] = Header(default=None)) -> None:
+    """
+    FastAPI dependency for the MT5 auto-execution endpoints. These are
+    called by an unattended machine (the VPS-side executor script), not a
+    logged-in person, so they're protected by a shared secret header
+    instead of a user JWT — no login/refresh flow for a script to manage.
+
+    503 (not 401) when EXECUTOR_API_KEY isn't configured at all, so a
+    backend deployed without it fails closed rather than silently
+    accepting any request with no key — auto-execution is off by default
+    until this is deliberately set.
+    """
+    if not settings.EXECUTOR_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auto-execution is not configured on this server (EXECUTOR_API_KEY unset).",
+        )
+
+    if not x_executor_key or x_executor_key != settings.EXECUTOR_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing X-Executor-Key header.",
+        )

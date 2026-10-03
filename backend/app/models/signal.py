@@ -47,5 +47,17 @@ class Signal(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Auto-execution (MT5 bridge) — set once the executor has handled this
+    # signal one way or another (filled, or deliberately skipped), so it's
+    # never picked up and acted on twice. execution_note carries the
+    # outcome either way ("filled: ticket 123456" or "skipped: stale at
+    # execution time", "skipped: max concurrent trades reached", etc).
+    auto_executed = Column(Boolean, default=False, index=True)
+    auto_executed_at = Column(DateTime(timezone=True), nullable=True)
+    mt5_ticket = Column(String(50), nullable=True)
+    execution_price = Column(Float, nullable=True)
+    execution_lot_size = Column(Float, nullable=True)
+    execution_note = Column(Text, nullable=True)
+
     def __repr__(self):
         return f"<Signal {self.pair} {self.direction} @ {self.current_price}>"

@@ -33,7 +33,15 @@ class Settings(BaseSettings):
     # Email Notifications
     RESEND_API_KEY: str = ""
     NOTIFICATION_EMAIL: str = ""
-    
+
+    # MT5 auto-execution bridge — shared secret the VPS-side executor
+    # script sends in an X-Executor-Key header. Not a user JWT: the
+    # executor is a machine, not a logged-in person, and a long-lived
+    # shared key is simpler/safer here than juggling token refresh in an
+    # unattended script. Leave blank to keep the executable-signals
+    # endpoints disabled (they 503 until this is set).
+    EXECUTOR_API_KEY: str = ""
+
 
     # CORS - allowed origins for frontend
     ALLOWED_ORIGINS: List[str] = [

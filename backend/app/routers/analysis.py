@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 from app.database import get_db
 from app.models.signal import Signal
 from app.schemas.signal import SignalRequest, SignalResponse
@@ -18,7 +20,7 @@ from app.services.auto_signal_engine import (
     MONTHLY_AI_CALL_BUDGET,
     get_signal_expiry_hours,
 )
-from app.middleware.auth_middleware import get_current_user
+from app.middleware.auth_middleware import get_current_user, verify_executor_key
 from app.models.user import User
 
 router = APIRouter(prefix="/api/analysis", tags=["AI Analysis"])
@@ -154,6 +156,50 @@ def get_active_signals(
     return [SignalResponse.model_validate(s) for s in signals]
 
 
+# --- MT5 auto-execution bridge -------------------------------------------
+#
+# Called by the VPS-side executor script (mt5_executor/), not the frontend.
+# Deliberately stricter than the notification filters in auto_signal_engine
+# (confidence >= 62, R:R >= 1.5) — nothing double-checks these before real
+# money moves, so the bar for "auto-executable" is higher than the bar for
+# "worth alerting a human about".
+#
+# Registered here, BEFORE /signals/{signal_id} below: route matching is
+# order-dependent, and a GET to /signals/executable would otherwise be
+# swallowed by {signal_id} treating "executable" as an id.
+EXECUTOR_MIN_CONFIDENCE = 65
+EXECUTOR_MIN_RR_RATIO = 1.5
+
+
+class MarkExecutedRequest(BaseModel):
+    mt5_ticket: Optional[str] = None
+    execution_price: Optional[float] = None
+    execution_lot_size: Optional[float] = None
+    note: str
+
+
+@router.get("/signals/executable", response_model=list[SignalResponse])
+def get_executable_signals(
+    _: None = Depends(verify_executor_key),
+    db: Session = Depends(get_db),
+):
+    """
+    Active, not-yet-handled signals that clear the auto-execution bar.
+    The executor polls this instead of /signals so it never sees a signal
+    twice: once handled (filled OR deliberately skipped), the executor
+    calls /signals/{id}/mark-executed, which excludes it here for good.
+    """
+    signals = db.query(Signal).filter(
+        Signal.is_active == True,
+        Signal.direction != "NO_TRADE",
+        Signal.auto_executed == False,
+        Signal.confidence_score >= EXECUTOR_MIN_CONFIDENCE,
+        Signal.rr_ratio >= EXECUTOR_MIN_RR_RATIO,
+    ).order_by(Signal.created_at.asc()).limit(20).all()
+
+    return [SignalResponse.model_validate(s) for s in signals]
+
+
 @router.get("/signals/{signal_id}", response_model=SignalResponse)
 def get_signal(
     signal_id: str,
@@ -186,6 +232,34 @@ def get_latest_signal(
             detail=f"No active signal found for {pair}."
         )
     return SignalResponse.model_validate(signal)
+
+
+@router.post("/signals/{signal_id}/mark-executed")
+def mark_signal_executed(
+    signal_id: str,
+    payload: MarkExecutedRequest,
+    _: None = Depends(verify_executor_key),
+    db: Session = Depends(get_db),
+):
+    """
+    Records what the executor did with a signal — filled or skipped —
+    and flags it so /signals/executable never returns it again. Called
+    exactly once per signal by the executor, right after it either places
+    the order or decides not to (stale entry, safety limit hit, etc).
+    """
+    signal = db.query(Signal).filter(Signal.id == signal_id).first()
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found.")
+
+    signal.auto_executed = True
+    signal.auto_executed_at = datetime.now(timezone.utc)
+    signal.mt5_ticket = payload.mt5_ticket
+    signal.execution_price = payload.execution_price
+    signal.execution_lot_size = payload.execution_lot_size
+    signal.execution_note = payload.note
+    db.commit()
+
+    return {"message": "Signal execution recorded."}
 
 
 @router.post("/signals/{signal_id}/dismiss")
