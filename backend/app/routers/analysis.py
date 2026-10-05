@@ -6,7 +6,7 @@ from typing import Optional
 from app.database import get_db
 from app.models.signal import Signal
 from app.schemas.signal import SignalRequest, SignalResponse
-from app.services.market_data import fetch_ohlcv
+from app.services.market_data import fetch_ohlcv, fetch_quote
 from app.services.indicator_engine import compute_all_indicators
 from app.services.ai_analysis import generate_ai_signal
 from app.services.alert_service import (
@@ -199,6 +199,92 @@ def get_executable_signals(
 
     return [SignalResponse.model_validate(s) for s in signals]
 
+# --- End-to-end execution test --------------------------------------------
+#
+# Lets you verify the WHOLE auto-execution pipeline — backend save →
+# /signals/executable → VPS executor poll → live-tick freshness check →
+# lot sizing → real (demo) order — without waiting for the AI to naturally
+# produce a signal strong enough to qualify. Waiting on that is
+# unpredictable (it only fires when real market conditions line up), so
+# this creates a synthetic signal that clears the executor's bar on
+# purpose: confidence and R:R comfortably above EXECUTOR_MIN_CONFIDENCE /
+# EXECUTOR_MIN_RR_RATIO, with an entry zone pinned tight around the live
+# price (fetched fresh, right now) so it should still be "fresh" by the
+# time the executor's own live-tick check runs a few seconds later.
+#
+# Stop-loss distance is deliberately small (0.1% of price) so the
+# computed lot size clears the broker's minimum (0.01) on every pair,
+# including XAU/USD, at this account's balance and risk %. Not a
+# realistic trade size/stop for real signals — purely sized to prove the
+# pipeline works, which is this endpoint's only job.
+class TestSignalRequest(BaseModel):
+    pair: str = "EUR/USD"
+    direction: str = "BUY"  # BUY or SELL
+
+
+@router.post("/signals/test-signal", response_model=SignalResponse)
+async def create_test_signal(
+    payload: TestSignalRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Creates a synthetic signal strong enough to auto-execute, for testing
+    the MT5 bridge end-to-end on a DEMO account. See the block comment
+    above for why it's shaped the way it is. Never use this against a
+    live account — it exists purely to prove the pipeline fires.
+    """
+    pair = payload.pair.upper().replace("-", "/")
+    direction = payload.direction.upper()
+    if direction not in ("BUY", "SELL"):
+        raise HTTPException(status_code=400, detail="direction must be BUY or SELL")
+
+    quote = await fetch_quote(pair)
+    if quote is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not fetch a live price for {pair} to build the test signal."
+        )
+    price = quote["price"]
+
+    entry_pad = price * 0.0005    # ±0.05% — tight entry zone right at live price
+    stop_dist = price * 0.001     # 0.1% stop
+    tp_dist = price * 0.002       # 0.2% target → R:R = 2.0
+
+    if direction == "BUY":
+        entry_low, entry_high = price - entry_pad, price + entry_pad
+        stop_loss = price - stop_dist
+        take_profit = price + tp_dist
+    else:
+        entry_low, entry_high = price - entry_pad, price + entry_pad
+        stop_loss = price + stop_dist
+        take_profit = price - tp_dist
+
+    signal = Signal(
+        pair=pair,
+        timeframe="M15",
+        direction=direction,
+        current_price=price,
+        entry_low=entry_low,
+        entry_high=entry_high,
+        stop_loss=stop_loss,
+        take_profit_1=take_profit,
+        take_profit_2=take_profit,
+        rr_ratio=2.0,
+        confidence_score=90,
+        ai_explanation="TEST SIGNAL — created via /signals/test-signal to verify the "
+                        "auto-execution pipeline end-to-end. Not a real market call.",
+        risk_warning="This is a synthetic test signal, not AI-generated market analysis.",
+        atr=price * 0.0015,  # rough volatility estimate, just to give the
+                              # executor's freshness-check buffer something
+                              # non-zero to work with
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    db.add(signal)
+    db.commit()
+    db.refresh(signal)
+
+    return SignalResponse.model_validate(signal)
 
 @router.get("/signals/{signal_id}", response_model=SignalResponse)
 def get_signal(
