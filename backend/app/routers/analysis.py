@@ -235,7 +235,7 @@ def get_latest_signal(
 
 
 @router.post("/signals/{signal_id}/mark-executed")
-def mark_signal_executed(
+async def mark_signal_executed(
     signal_id: str,
     payload: MarkExecutedRequest,
     _: None = Depends(verify_executor_key),
@@ -246,6 +246,10 @@ def mark_signal_executed(
     and flags it so /signals/executable never returns it again. Called
     exactly once per signal by the executor, right after it either places
     the order or decides not to (stale entry, safety limit hit, etc).
+
+    Also fires a Telegram message and email the moment this is recorded,
+    so you find out a trade was taken (or skipped, and why) immediately
+    instead of only discovering it later in executor.log or the MT5 app.
     """
     signal = db.query(Signal).filter(Signal.id == signal_id).first()
     if not signal:
@@ -258,6 +262,21 @@ def mark_signal_executed(
     signal.execution_lot_size = payload.execution_lot_size
     signal.execution_note = payload.note
     db.commit()
+
+    # Best-effort notifications — the execution is already recorded above,
+    # so a notification failure here must never make the executor think
+    # its report failed (it would otherwise be retried/re-evaluated).
+    try:
+        from app.services.telegram_service import send_execution_notification
+        await send_execution_notification(signal, payload)
+    except Exception as e:
+        print(f"[Executor] Telegram execution notification failed: {e}")
+
+    try:
+        from app.services.email_service import send_execution_email
+        await send_execution_email(signal, payload, db)
+    except Exception as e:
+        print(f"[Executor] Email execution notification failed: {e}")
 
     return {"message": "Signal execution recorded."}
 

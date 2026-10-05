@@ -103,6 +103,56 @@ TP3: {fmt(tp3)}
     await send_telegram_message(message.strip())
 
 
+async def send_execution_notification(signal, payload) -> None:
+    """
+    Notify Telegram the moment the MT5 executor fills or skips a signal —
+    separate from send_signal_notification above, which fires when a
+    signal is first generated, not when (or whether) it actually gets
+    traded. payload is the MarkExecutedRequest the executor posted, so
+    payload.note always says what happened ("filled: ticket 123 @ 1.2345"
+    or "skipped: <reason>").
+    """
+    note = payload.note or ""
+    filled = note.startswith("filled")
+
+    def fmt(price):
+        if not price:
+            return "N/A"
+        if "JPY" in signal.pair:
+            return f"{price:.3f}"
+        if "XAU" in signal.pair:
+            return f"{price:.2f}"
+        return f"{price:.5f}"
+
+    if filled:
+        emoji = "✅"
+        header = "TRADE EXECUTED"
+        body = (
+            f"<b>Ticket:</b> {payload.mt5_ticket}\n"
+            f"<b>Fill Price:</b> {fmt(payload.execution_price)}\n"
+            f"<b>Lot Size:</b> {payload.execution_lot_size}"
+        )
+    else:
+        emoji = "⏭️"
+        header = "TRADE SKIPPED"
+        body = f"<b>Reason:</b> {note}"
+
+    message = f"""
+{emoji} <b>FOREX INTEL — {header}</b> {emoji}
+
+<b>Pair:</b> {signal.pair}
+<b>Timeframe:</b> {signal.timeframe}
+<b>Direction:</b> {signal.direction}
+
+{body}
+
+━━━━━━━━━━━━━━━━━━
+<i>Auto-Execution Bridge — demo account</i>
+━━━━━━━━━━━━━━━━━━
+"""
+    await send_telegram_message(message.strip())
+
+
 async def send_test_notification() -> bool:
     """Send a test message to verify Telegram is configured correctly."""
     message = """

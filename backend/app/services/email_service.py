@@ -324,6 +324,102 @@ async def send_signal_email(signal_data: dict, pair: str, timeframe: str, db: Se
         await send_to_address(email, subject, html)
 
 
+async def send_execution_email(signal, payload, db: Session) -> None:
+    """
+    Email the moment the MT5 executor fills or skips a signal — the
+    execution-side counterpart to send_signal_email above, which only
+    covers the signal being generated, not what actually happened to it.
+    Reuses the same recipient list (get_signal_recipient_emails) so it
+    scales the same way across registered users.
+    """
+    note = payload.note or ""
+    filled = note.startswith("filled")
+
+    def fmt(price):
+        if not price:
+            return "N/A"
+        if "JPY" in signal.pair:
+            return f"{price:.3f}"
+        if "XAU" in signal.pair:
+            return f"{price:.2f}"
+        return f"{price:.5f}"
+
+    color = "#22c55e" if filled else "#94a3b8"
+    emoji = "✅" if filled else "⏭️"
+    header = "Trade Executed" if filled else "Trade Skipped"
+
+    if filled:
+        detail_rows = f"""
+    <div style="background:#1e293b;border-radius:12px;padding:16px;margin-bottom:12px;">
+      <p style="color:#94a3b8;font-size:12px;margin:0 0 4px;">MT5 Ticket</p>
+      <p style="color:#e2e8f0;font-size:18px;font-family:monospace;margin:0;">{payload.mt5_ticket}</p>
+    </div>
+    <div style="background:#1e293b;border-radius:12px;padding:16px;margin-bottom:12px;">
+      <p style="color:#94a3b8;font-size:12px;margin:0 0 4px;">Fill Price / Lot Size</p>
+      <p style="color:#e2e8f0;font-size:18px;font-family:monospace;margin:0;">{fmt(payload.execution_price)} / {payload.execution_lot_size}</p>
+    </div>
+"""
+    else:
+        detail_rows = f"""
+    <div style="background:#1e293b;border-radius:12px;padding:16px;margin-bottom:12px;">
+      <p style="color:#94a3b8;font-size:12px;margin:0 0 4px;">Reason Skipped</p>
+      <p style="color:#e2e8f0;font-size:14px;margin:0;">{note}</p>
+    </div>
+"""
+
+    html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background-color:#0f1117;font-family:Arial,sans-serif;">
+<div style="max-width:600px;margin:0 auto;padding:20px;">
+
+  <div style="background:linear-gradient(135deg,#1B2A4A,#0E3460);border-radius:12px;padding:24px;text-align:center;margin-bottom:20px;">
+    <h1 style="color:#C9A84C;margin:0;font-size:28px;">⚡ FOREX INTEL</h1>
+    <p style="color:#94a3b8;margin:8px 0 0;">Auto-Execution Bridge</p>
+  </div>
+
+  <div style="background:#1e293b;border:2px solid {color};border-radius:12px;padding:20px;text-align:center;margin-bottom:20px;">
+    <div style="font-size:40px;margin-bottom:8px;">{emoji}</div>
+    <h2 style="color:{color};margin:0;font-size:24px;font-weight:bold;">{header}</h2>
+    <p style="color:#e2e8f0;margin:8px 0 0;font-size:18px;font-weight:bold;">{signal.direction} {signal.pair} — {signal.timeframe}</p>
+  </div>
+
+  {detail_rows}
+
+  <div style="text-align:center;margin-bottom:20px;">
+    <a href="https://forex-intel-mu.vercel.app/journal"
+       style="background:#C9A84C;color:#1B2A4A;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block;">
+      View in App →
+    </a>
+  </div>
+
+  <div style="text-align:center;padding:16px;border-top:1px solid #374151;">
+    <p style="color:#64748b;font-size:12px;margin:0;">
+      Demo account only. Not financial advice.<br>
+      Forex Intel • Auto-Execution Bridge
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
+"""
+
+    subject = f"{emoji} Forex Intel: {header} — {signal.pair} {signal.direction}"
+
+    recipients = get_signal_recipient_emails(db, signal.pair)
+    if not recipients:
+        print(f"[Email] No users watching {signal.pair} — execution email not sent")
+        return
+
+    for email in recipients:
+        await send_to_address(email, subject, html)
+
+
 async def send_test_email() -> bool:
     """Send a test email to verify configuration."""
     html = """
