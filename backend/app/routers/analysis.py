@@ -167,7 +167,7 @@ def get_active_signals(
 # Registered here, BEFORE /signals/{signal_id} below: route matching is
 # order-dependent, and a GET to /signals/executable would otherwise be
 # swallowed by {signal_id} treating "executable" as an id.
-EXECUTOR_MIN_CONFIDENCE = 65
+EXECUTOR_MIN_CONFIDENCE = 62
 EXECUTOR_MIN_RR_RATIO = 1.5
 
 
