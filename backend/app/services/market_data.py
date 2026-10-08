@@ -1,4 +1,5 @@
 import asyncio
+import re
 import httpx
 import pandas as pd
 from typing import Optional
@@ -11,6 +12,12 @@ from app.services.alert_service import (
 )
 
 BASE_URL = "https://api.twelvedata.com"
+
+
+def _scrub(err) -> str:
+    """Error text that is safe to log: httpx puts the full request URL
+    (including ?apikey=...) in its messages, so strip the key out."""
+    return re.sub(r"apikey=[^&\s'\"]+", "apikey=***", str(err))
 
 # Map our pair format to Twelve Data format
 PAIR_MAP = {
@@ -76,10 +83,10 @@ async def fetch_ohlcv(
             return df
 
         except httpx.HTTPError as e:
-            print(f"HTTP error fetching {pair}: {e}")
+            print(f"HTTP error fetching {pair}: {_scrub(e)}")
             return None
         except Exception as e:
-            print(f"Error fetching {pair}: {e}")
+            print(f"Error fetching {pair}: {_scrub(e)}")
             return None
 
 
@@ -124,13 +131,13 @@ async def fetch_quote(pair: str) -> Optional[dict]:
             if e.response is not None and e.response.status_code == 429:
                 print(f"[MarketData] Rate limited by Twelve Data for {pair} — using stale cache if available")
             else:
-                print(f"Error fetching quote for {pair}: {e}")
+                print(f"Error fetching quote for {pair}: {_scrub(e)}")
             stale = get_stale_price(pair)
             if stale is not None:
                 return {"pair": pair, "price": stale, "source": "stale"}
             return None
         except Exception as e:
-            print(f"Error fetching quote for {pair}: {e}")
+            print(f"Error fetching quote for {pair}: {_scrub(e)}")
             stale = get_stale_price(pair)
             if stale is not None:
                 return {"pair": pair, "price": stale, "source": "stale"}
