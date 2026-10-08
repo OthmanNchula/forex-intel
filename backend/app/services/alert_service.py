@@ -253,6 +253,19 @@ def claim_scan_candle(pair: str, timeframe: str, boundary_ts: int, ttl_seconds: 
     return True
 
 
+def release_scan_candle(pair: str, timeframe: str, boundary_ts: int) -> None:
+    """Give a claimed candle back (e.g. the data fetch failed) so the next
+    scan pass retries it instead of losing the signal."""
+    key = f"scan:candle:{pair}:{timeframe}:{boundary_ts}"
+    if redis is not None:
+        try:
+            redis.delete(key)
+        except Exception as e:
+            print(f"[Redis] release_scan_candle failed: {e}")
+    if _local_candle_claims.get((pair, timeframe)) == boundary_ts:
+        _local_candle_claims.pop((pair, timeframe), None)
+
+
 def was_recently_analyzed(
     pair: str,
     timeframe: str,
