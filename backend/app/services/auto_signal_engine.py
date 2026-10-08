@@ -16,7 +16,6 @@ from app.services.alert_service import (
     increment_daily_ai_call_count,
     redis_heartbeat,
     claim_scan_candle,
-    release_scan_candle,
 )
 
 # Pairs and timeframes to scan
@@ -344,31 +343,6 @@ def signal_already_exists(db: Session, pair: str, timeframe: str) -> bool:
     return existing is not None
 
 
-# Twelve Data's free plan allows about 8 requests a minute (and the live
-# price feed shares the same key), so scanner requests are spaced out.
-# A request that still fails (e.g. 429) returns None -> the pair/timeframe
-# is retried on the next pass instead of being lost.
-MIN_SECONDS_BETWEEN_FETCHES = 9
-_fetch_lock = asyncio.Lock()
-_last_fetch_at = 0.0
-
-
-async def _throttled_fetch(pair: str, timeframe: str, limit: int):
-    global _last_fetch_at
-    async with _fetch_lock:
-        wait = MIN_SECONDS_BETWEEN_FETCHES - (asyncio.get_event_loop().time() - _last_fetch_at)
-        if wait > 0:
-            await asyncio.sleep(wait)
-        try:
-            return await fetch_ohlcv(pair, timeframe, limit)
-        finally:
-            _last_fetch_at = asyncio.get_event_loop().time()
-
-
-# Returned by analyze_pair when market data could not be fetched, so the
-# scan pass can release the candle and try again shortly.
-DATA_UNAVAILABLE = "DATA_UNAVAILABLE"
-
 # Each timeframe is checked against the next one up.
 HIGHER_TIMEFRAME = {"M15": "H1", "H1": "H4"}
 _HTF_CACHE: dict = {}          # (pair, tf) -> (fetched_at, ema_cross)
@@ -386,15 +360,14 @@ async def get_higher_timeframe_cross(pair: str, timeframe: str) -> Optional[str]
     if cached and now - cached[0] < timedelta(minutes=HTF_CACHE_MINUTES):
         return cached[1]
     try:
-        df = await _throttled_fetch(pair, htf, 120)
+        df = await fetch_ohlcv(pair, htf, 120)
         df = drop_forming_candle(df, htf)
         ind = compute_all_indicators(df, include_chart=False) if df is not None else None
         cross = ind.get("ema_cross") if ind else None
     except Exception as e:
         print(f"[AutoSignal] {pair} {htf} higher-timeframe check failed: {e}")
         cross = None
-    if cross is not None:      # never cache a failed lookup
-        _HTF_CACHE[key] = (now, cross)
+    _HTF_CACHE[key] = (now, cross)
     return cross
 
 
@@ -406,16 +379,14 @@ async def analyze_pair(pair: str, timeframe: str) -> Optional[dict]:
     engine decides to stand aside (the reason is always logged).
     """
     try:
-        df = await _throttled_fetch(pair, timeframe, 200)
+        df = await fetch_ohlcv(pair, timeframe, 200)
         if df is None:
-            print(f"[AutoSignal] {pair} {timeframe} — no market data, will retry shortly")
-            return DATA_UNAVAILABLE
+            return None
         df = drop_forming_candle(df, timeframe)
 
         indicators = compute_all_indicators(df, include_chart=False)
         if not indicators:
-            print(f"[AutoSignal] {pair} {timeframe} — not enough candles, will retry shortly")
-            return DATA_UNAVAILABLE
+            return None
 
         if not has_volatility_spike(indicators, pair, timeframe):
             print(f"[AutoSignal] {pair} {timeframe} — stand aside: market too quiet")
@@ -441,7 +412,7 @@ async def analyze_pair(pair: str, timeframe: str) -> Optional[dict]:
 
     except Exception as e:
         print(f"[AutoSignal] Error analyzing {pair} {timeframe}: {e}")
-        return DATA_UNAVAILABLE
+        return None
 
 
 async def save_auto_signal(signal_data: dict) -> Optional[Signal]:
@@ -613,20 +584,15 @@ async def run_signal_scan_cycle() -> dict:
           + ", ".join(f"{p} {tf}" for p, tf, _ in due))
 
     signals_generated = 0
-    retry_later = 0
-    for pair, timeframe, boundary in due:
+    for pair, timeframe, _boundary in due:
+        await asyncio.sleep(2)
         result = await analyze_pair(pair, timeframe)
-        if result == DATA_UNAVAILABLE:
-            release_scan_candle(pair, timeframe, int(boundary.timestamp()))
-            retry_later += 1
-            continue
         if result:
             saved = await save_auto_signal(result)
             if saved:
                 signals_generated += 1
 
-    print(f"[AutoSignal] ✅ scan complete — {signals_generated} signals generated"
-          + (f", {retry_later} to retry (data unavailable)" if retry_later else ""))
+    print(f"[AutoSignal] ✅ scan complete — {signals_generated} signals generated")
     return {
         "scanned": True,
         "analyzed": [f"{p} {tf}" for p, tf, _ in due],
