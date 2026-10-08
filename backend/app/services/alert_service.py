@@ -229,6 +229,30 @@ def store_daily_risk(user_id: str, risk_amount: float) -> float:
         return risk_amount
 
 
+# In-process fallback used only when Redis is unreachable.
+_local_candle_claims: dict = {}
+
+
+def claim_scan_candle(pair: str, timeframe: str, boundary_ts: int, ttl_seconds: int = 3600) -> bool:
+    """
+    Atomically claim "analyze this pair/timeframe for the candle that
+    closed at boundary_ts". Returns True for exactly one caller, so the
+    in-process loop and the Railway Cron job (or two instances) never
+    analyze, and spend AI credits on, the same candle twice.
+    """
+    key = f"scan:candle:{pair}:{timeframe}:{boundary_ts}"
+    if redis is not None:
+        try:
+            return bool(redis.set(key, "1", nx=True, ex=ttl_seconds))
+        except Exception as e:
+            print(f"[Redis] claim_scan_candle failed, using in-process fallback: {e}")
+    local_key = (pair, timeframe)
+    if _local_candle_claims.get(local_key) == boundary_ts:
+        return False
+    _local_candle_claims[local_key] = boundary_ts
+    return True
+
+
 def was_recently_analyzed(
     pair: str,
     timeframe: str,

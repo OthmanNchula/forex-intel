@@ -61,6 +61,36 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return atr
 
 
+def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """
+    Calculate the Average Directional Index (ADX, Wilder smoothing).
+
+    ADX measures how STRONG a trend is, not which way it points: roughly
+    below 20 the market is ranging/sideways, above 25 it is trending.
+    """
+    high = df["high"]
+    low = df["low"]
+    close = df["close"]
+
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=df.index)
+    minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=df.index)
+
+    prev_close = close.shift(1)
+    true_range = pd.concat(
+        [high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1
+    ).max(axis=1)
+
+    alpha = 1.0 / period
+    atr_w = true_range.ewm(alpha=alpha, adjust=False).mean()
+    plus_di = 100 * plus_dm.ewm(alpha=alpha, adjust=False).mean() / atr_w.replace(0, np.nan)
+    minus_di = 100 * minus_dm.ewm(alpha=alpha, adjust=False).mean() / atr_w.replace(0, np.nan)
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+    adx = dx.ewm(alpha=alpha, adjust=False).mean()
+    return adx.fillna(0)
+
+
 def detect_support_resistance(
     df: pd.DataFrame,
     window: int = 10,
@@ -114,7 +144,7 @@ def get_volatility_label(atr: float, price: float) -> str:
     return "HIGH"
 
 
-def compute_all_indicators(df: pd.DataFrame) -> Optional[dict]:
+def compute_all_indicators(df: pd.DataFrame, include_chart: bool = True) -> Optional[dict]:
     """
     Master function — computes all indicators from OHLCV DataFrame.
     Returns a dict of the latest values ready for AI analysis and API response.
@@ -159,9 +189,27 @@ def compute_all_indicators(df: pd.DataFrame) -> Optional[dict]:
         [r for r in sr_zones["resistance"] if r > latest_close], default=None
     )
 
+    # --- Market-regime measurements (trending vs sideways) ---
+    adx = calculate_adx(df, 14)
+    latest_adx = round(float(adx.iloc[-1]), 2)
+    safe_atr = latest_atr if latest_atr > 0 else 1e-9
+
+    # Distance between the two EMAs, measured in ATRs.
+    ema_gap_atr = round(abs(latest_ema20 - latest_ema50) / safe_atr, 3)
+    # How far EMA50 moved over the last 10 candles, in ATRs (signed).
+    ema50_slope_atr = round(float(ema50.iloc[-1] - ema50.iloc[-11]) / safe_atr, 3)
+    # How many times EMA20 crossed EMA50 in the last 30 candles.
+    ema_sign = np.sign((ema20 - ema50).iloc[-31:])
+    ema_cross_count_30 = int((ema_sign.diff().abs() > 0).sum())
+    # Height of the last 20 candles' high-low box, in ATRs.
+    range_atr_20 = round(
+        float(df["high"].iloc[-20:].max() - df["low"].iloc[-20:].min()) / safe_atr, 2
+    )
+
     # Build series data for charting (last 100 candles)
     chart_data = []
-    for i in range(max(0, len(df) - 100), len(df)):
+    chart_start = max(0, len(df) - 100) if include_chart else len(df)
+    for i in range(chart_start, len(df)):
         chart_data.append({
             "time": int(df.index[i].timestamp()),
             "open": round(float(df["open"].iloc[i]), 5),
@@ -188,6 +236,11 @@ def compute_all_indicators(df: pd.DataFrame) -> Optional[dict]:
         "atr": latest_atr,
         "trend": trend,
         "volatility": volatility,
+        "adx": latest_adx,
+        "ema_gap_atr": ema_gap_atr,
+        "ema50_slope_atr": ema50_slope_atr,
+        "ema_cross_count_30": ema_cross_count_30,
+        "range_atr_20": range_atr_20,
         "nearest_support": nearest_support,
         "nearest_resistance": nearest_resistance,
         "support_levels": sr_zones["support"],

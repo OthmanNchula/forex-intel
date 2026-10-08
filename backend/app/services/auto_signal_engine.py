@@ -1,12 +1,13 @@
 import asyncio
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models.signal import Signal
 from app.services.market_data import fetch_ohlcv
 from app.services.indicator_engine import compute_all_indicators
-from app.services.ai_analysis import generate_ai_signal
+from app.services import rules_engine
 from app.services.alert_service import (
     cache_signal,
     is_within_ai_call_budget,
@@ -14,6 +15,7 @@ from app.services.alert_service import (
     is_within_daily_ai_call_budget,
     increment_daily_ai_call_count,
     redis_heartbeat,
+    claim_scan_candle,
 )
 
 # Pairs and timeframes to scan
@@ -75,7 +77,7 @@ def get_signal_expiry_hours(timeframe: str) -> float:
 # analyze_pair() stops calling the AI for the rest of the calendar month
 # and falls back to a technical-indicators-only signal instead of going
 # silent — see generate_technical_fallback_signal() below.
-MONTHLY_AI_CALL_BUDGET = 900
+MONTHLY_AI_CALL_BUDGET = int(os.getenv("MONTHLY_AI_CALL_BUDGET", "900"))
 
 # Daily slice of the monthly budget — spreads MONTHLY_AI_CALL_BUDGET
 # evenly across a 30-day month so a single volatile day (or week) can't
@@ -87,31 +89,57 @@ MONTHLY_AI_CALL_BUDGET = 900
 # tomorrow," not "wait for next month."
 DAILY_AI_CALL_BUDGET = MONTHLY_AI_CALL_BUDGET // 30  # = 30 calls/day
 
-# Market session windows in UTC — wider than the bare ±30-min open-only
-# windows, so the engine is awake for the hours a move is actually
-# likely to develop, not just the exact minute of the open. Still NOT
-# the old continuous 00:00-21:00 coverage — gaps remain in the lower-
-# liquidity middle of each session. With no per-pair cooldown anymore,
-# every scan inside these windows that clears the free pre-checks is a
-# real AI call, so the width of these windows now directly affects how
-# fast the daily and monthly budgets get used up — narrower windows here
-# would make both last more comfortably if they're burning too fast.
-SESSION_RANGES = [
-    {"name": "Tokyo Session", "start_hour": 0, "end_hour": 2},
-    {"name": "London Session", "start_hour": 7, "end_hour": 10},
-    {"name": "New York Open", "start_hour": 12, "end_hour": 13},
-    {"name": "London/NY Overlap", "start_hour": 13, "end_hour": 16},
-    {"name": "New York Session", "start_hour": 16, "end_hour": 18},
-]
+# Continuous scanning: the engine no longer sleeps between "session
+# windows" or checks every 30 minutes. It wakes every minute while the
+# market is open (Sunday 22:00 UTC to Friday 22:00 UTC, see
+# is_market_open()) and analyzes a pair/timeframe the moment a NEW candle
+# has closed on it — once per candle, using closed candles only. That
+# keeps the entry as close to the candle close as possible, and it also
+# bounds AI spend: H1 is analyzed at most once an hour per pair, H4 once
+# every four hours, M15 once every 15 minutes.
+TIMEFRAME_MINUTES = {"M15": 15, "H1": 60, "H4": 240}
 
-# High impact pairs per session
-SESSION_PAIRS = {
-    "Tokyo Session": ["USD/JPY", "AUD/USD"],
-    "London Session": ["EUR/USD", "GBP/USD", "XAU/USD"],
-    "New York Open": ["EUR/USD", "GBP/USD", "USD/CAD", "XAU/USD"],
-    "London/NY Overlap": ["EUR/USD", "GBP/USD", "XAU/USD", "USD/JPY"],
-    "New York Session": ["EUR/USD", "GBP/USD", "USD/CAD", "XAU/USD"],
-}
+# Wait this long after a candle closes before analyzing it, so the data
+# provider has time to publish the finished candle.
+CANDLE_CLOSE_DELAY_SECONDS = 45
+
+# If a candle closed more than this long ago and was never analyzed (the
+# service was down, say), skip it rather than send a stale signal.
+CANDLE_GRACE_MINUTES = 10
+
+# M15 is only scanned in the highest-liquidity hours (London/NY overlap
+# and NY open) — it is the most expensive timeframe to scan continuously.
+M15_SCAN_HOURS_UTC = range(12, 17)
+
+# How often the in-process loop wakes up to look for newly closed candles.
+LOOP_CHECK_SECONDS = 60
+
+
+def latest_candle_boundary(now: datetime, timeframe: str) -> datetime:
+    """Start time (UTC) of the most recent candle boundary for this timeframe."""
+    minutes = TIMEFRAME_MINUTES[timeframe]
+    epoch_minutes = int(now.timestamp() // 60)
+    return datetime.fromtimestamp((epoch_minutes // minutes) * minutes * 60, tz=timezone.utc)
+
+
+def timeframes_for_now(now: datetime) -> list:
+    """Timeframes worth scanning right now."""
+    if now.hour in M15_SCAN_HOURS_UTC:
+        return ["M15", "H1", "H4"]
+    return ["H1", "H4"]
+
+
+def drop_forming_candle(df, timeframe: str):
+    """Remove the still-open last candle so indicators use closed candles only."""
+    minutes = TIMEFRAME_MINUTES.get(timeframe)
+    if minutes is None or df is None or len(df) < 2:
+        return df
+    last_open = df.index[-1]
+    if last_open.tzinfo is None:
+        last_open = last_open.tz_localize("UTC")
+    if last_open + timedelta(minutes=minutes) > datetime.now(timezone.utc):
+        return df.iloc[:-1]
+    return df
 
 
 def is_market_open() -> bool:
@@ -133,26 +161,6 @@ def is_market_open() -> bool:
     return True
 
 
-def get_active_session(now: datetime) -> Optional[dict]:
-    """
-    Check which session RANGE the current time falls in (see
-    SESSION_RANGES above). Returns session info if active, None otherwise
-    (only true outside 00:00–21:00 UTC, i.e. the daily low-liquidity gap).
-    """
-    hour = now.hour
-
-    for session in SESSION_RANGES:
-        if session["start_hour"] <= hour < session["end_hour"]:
-            return session
-
-    return None
-
-
-def get_pairs_for_session(session_name: str) -> list:
-    """Get the most relevant pairs for a given session."""
-    return SESSION_PAIRS.get(session_name, SCAN_PAIRS)
-
-
 # Pair-specific minimum ATR values
 # Based on each pair's typical daily movement
 PAIR_ATR_THRESHOLDS = {
@@ -168,7 +176,12 @@ PAIR_ATR_THRESHOLDS = {
 DEFAULT_ATR_THRESHOLD = 0.00035  # fallback for unknown pairs
 
 
-def has_volatility_spike(indicators: dict, pair: str = "") -> bool:
+# The thresholds above are calibrated for H1. Smaller candles move less,
+# so M15 uses half of them.
+TIMEFRAME_ATR_SCALE = {"M15": 0.5, "H1": 1.0, "H4": 1.0}
+
+
+def has_volatility_spike(indicators: dict, pair: str = "", timeframe: str = "H1") -> bool:
     """
     Check if ATR indicates sufficient volatility for a valid signal.
     Uses pair-specific thresholds instead of a single ratio.
@@ -179,7 +192,7 @@ def has_volatility_spike(indicators: dict, pair: str = "") -> bool:
         return False
 
     # Get pair-specific threshold
-    threshold = PAIR_ATR_THRESHOLDS.get(pair, DEFAULT_ATR_THRESHOLD)
+    threshold = PAIR_ATR_THRESHOLDS.get(pair, DEFAULT_ATR_THRESHOLD) * TIMEFRAME_ATR_SCALE.get(timeframe, 1.0)
 
     passes = atr >= threshold
     if not passes:
@@ -330,133 +343,70 @@ def signal_already_exists(db: Session, pair: str, timeframe: str) -> bool:
     return existing is not None
 
 
-async def analyze_pair(pair: str, timeframe: str) -> Optional[dict]:
-    """Analyze a single pair. Only calls Claude AI if pre-checks pass."""
+# Each timeframe is checked against the next one up.
+HIGHER_TIMEFRAME = {"M15": "H1", "H1": "H4"}
+_HTF_CACHE: dict = {}          # (pair, tf) -> (fetched_at, ema_cross)
+HTF_CACHE_MINUTES = 20
+
+
+async def get_higher_timeframe_cross(pair: str, timeframe: str) -> Optional[str]:
+    """EMA20-vs-EMA50 state ("ABOVE"/"BELOW") of the next timeframe up, or None."""
+    htf = HIGHER_TIMEFRAME.get(timeframe)
+    if htf is None:
+        return None
+    key = (pair, htf)
+    cached = _HTF_CACHE.get(key)
+    now = datetime.now(timezone.utc)
+    if cached and now - cached[0] < timedelta(minutes=HTF_CACHE_MINUTES):
+        return cached[1]
     try:
-        # Fetch market data
+        df = await fetch_ohlcv(pair, htf, 120)
+        df = drop_forming_candle(df, htf)
+        ind = compute_all_indicators(df, include_chart=False) if df is not None else None
+        cross = ind.get("ema_cross") if ind else None
+    except Exception as e:
+        print(f"[AutoSignal] {pair} {htf} higher-timeframe check failed: {e}")
+        cross = None
+    _HTF_CACHE[key] = (now, cross)
+    return cross
+
+
+async def analyze_pair(pair: str, timeframe: str) -> Optional[dict]:
+    """
+    Analyze one pair/timeframe on its latest CLOSED candle using the
+    rules engine (see rules_engine.py). No AI is called anywhere here, so
+    this costs nothing per scan. Returns a signal dict, or None when the
+    engine decides to stand aside (the reason is always logged).
+    """
+    try:
         df = await fetch_ohlcv(pair, timeframe, 200)
         if df is None:
             return None
+        df = drop_forming_candle(df, timeframe)
 
-        # Compute indicators
-        indicators = compute_all_indicators(df)
+        indicators = compute_all_indicators(df, include_chart=False)
         if not indicators:
             return None
 
-        # Pre-check directional bias before calling AI
-        rsi = indicators.get("rsi", 50)
-        ema_cross = indicators.get("ema_cross", "")
-        macd_hist = indicators.get("macd_hist", 0)
-
-        bullish_points = sum([
-            ema_cross == "ABOVE",
-            rsi > 50,
-            macd_hist > 0,
-        ])
-        bearish_points = sum([
-            ema_cross == "BELOW",
-            rsi < 50,
-            macd_hist < 0,
-        ])
-
-        # Skip if no clear directional bias — SAVES API CREDITS
-        if bullish_points == bearish_points:
-            print(f"[AutoSignal] {pair} {timeframe} — mixed signals, skipping AI call")
+        if not has_volatility_spike(indicators, pair, timeframe):
+            print(f"[AutoSignal] {pair} {timeframe} — stand aside: market too quiet")
             return None
 
-        # Skip if no volatility spike during non-session times
-        if not has_volatility_spike(indicators, pair):
-            print(f"[AutoSignal] {pair} {timeframe} — low volatility, skipping AI call")
+        htf_cross = await get_higher_timeframe_cross(pair, timeframe)
+        decision = rules_engine.evaluate(pair, timeframe, indicators, htf_cross)
+
+        if decision["action"] != "TRADE":
+            print(f"[AutoSignal] {pair} {timeframe} — stand aside "
+                  f"[{decision['regime']}]: {decision['reason']}")
             return None
 
-        # The pre-check bias ("BUY"/"SELL") — used below by the technical
-        # fallback if the monthly AI budget has run out.
-        bias_direction = "BUY" if bullish_points > bearish_points else "SELL"
-
-        # NOTE: the per-pair/timeframe cooldown (was_recently_analyzed /
-        # mark_analyzed) was removed here at the user's request. Cost
-        # control now rests entirely on MONTHLY_AI_CALL_BUDGET below —
-        # every pair/timeframe that clears the free checks above gets a
-        # fresh AI call every time it's scanned, with no "already
-        # checked this recently" skip. That means a volatile session can
-        # burn through the monthly budget faster than before, which is a
-        # real trade-off: no missed re-analysis, but the technical-only
-        # fallback may kick in earlier in the month if conditions stay
-        # active. The functions still exist in alert_service.py if this
-        # needs to be reinstated later.
-
-        # Two spending caps, checked in order — either one being hit
-        # sends this to the technical-only fallback instead of the AI:
-        #
-        # 1. DAILY_AI_CALL_BUDGET — today's slice of the monthly budget.
-        #    This is what makes a single volatile day fall back to
-        #    technical-only for the REST OF TODAY and resume with the AI
-        #    tomorrow, instead of letting one busy day eat calls that
-        #    were meant to last the whole month.
-        # 2. MONTHLY_AI_CALL_BUDGET — the overall hard ceiling. Even if
-        #    today's slice isn't used up, once the month's total is
-        #    gone, that's it until next month.
-        budget_exhausted_reason = None
-        if not is_within_daily_ai_call_budget(DAILY_AI_CALL_BUDGET):
-            budget_exhausted_reason = f"today's AI budget ({DAILY_AI_CALL_BUDGET} calls/day) reached — resumes tomorrow"
-        elif not is_within_ai_call_budget(MONTHLY_AI_CALL_BUDGET):
-            budget_exhausted_reason = f"monthly AI budget ({MONTHLY_AI_CALL_BUDGET} calls) reached — resumes next month"
-
-        if budget_exhausted_reason:
-            print(f"[AutoSignal] 💸 {budget_exhausted_reason} — using technical-only fallback for {pair} {timeframe}")
-            passes, reason = check_technical_confluence(indicators, bias_direction)
-            if not passes:
-                print(f"[AutoSignal] {pair} {timeframe} — confluence failed: {reason}")
-                return None
-
-            ai_result = generate_technical_fallback_signal(pair, timeframe, indicators, bias_direction)
-            print(f"[AutoSignal] ✅ TECHNICAL-ONLY: {pair} {timeframe} {bias_direction} | "
-                  f"{TECHNICAL_FALLBACK_CONFIDENCE}% (no AI) | R:R {ai_result['rr_ratio']}")
-            return {
-                "pair": pair,
-                "timeframe": timeframe,
-                "ai_result": ai_result,
-                "indicators": indicators,
-            }
-
-        # Only now call Claude AI. Increment BOTH counters — daily and
-        # monthly are tracked independently, so both need bumping every
-        # time a call actually goes out.
-        increment_daily_ai_call_count()
-        increment_monthly_ai_call_count()
-        print(f"[AutoSignal] 🤖 Calling AI for {pair} {timeframe}...")
-        ai_result = await generate_ai_signal(pair, timeframe, indicators, df)
-
-        direction = ai_result.get("direction", "NO_TRADE")
-        confidence = ai_result.get("confidence_score", 0)
-        rr_ratio = ai_result.get("rr_ratio", 0)
-
-        if direction == "NO_TRADE":
-            print(f"[AutoSignal] {pair} {timeframe} — AI says NO_TRADE")
-            return None
-
-        if confidence < MIN_CONFIDENCE:
-            print(f"[AutoSignal] {pair} {timeframe} — confidence {confidence}% below {MIN_CONFIDENCE}%")
-            return None
-
-        # `rr_ratio and rr_ratio < MIN_RR_RATIO` would silently SKIP this
-        # check when rr_ratio is exactly 0 (0 is falsy in Python) — a
-        # degenerate signal with a meaningless R:R would then slip past
-        # the filter instead of being rejected. `is not None` catches it.
-        if rr_ratio is not None and rr_ratio < MIN_RR_RATIO:
-            print(f"[AutoSignal] {pair} {timeframe} — R:R {rr_ratio} below {MIN_RR_RATIO}")
-            return None
-
-        passes, reason = check_technical_confluence(indicators, direction)
-        if not passes:
-            print(f"[AutoSignal] {pair} {timeframe} — confluence failed: {reason}")
-            return None
-
-        print(f"[AutoSignal] ✅ HIGH PROBABILITY: {pair} {timeframe} {direction} | {confidence}% | R:R {rr_ratio}")
+        signal = decision["signal"]
+        print(f"[AutoSignal] ✅ RULES SIGNAL: {pair} {timeframe} {signal['direction']} | "
+              f"score {decision['score']} | regime {decision['regime']} | R:R {signal['rr_ratio']}")
         return {
             "pair": pair,
             "timeframe": timeframe,
-            "ai_result": ai_result,
+            "ai_result": signal,
             "indicators": indicators,
         }
 
@@ -589,102 +539,87 @@ async def expire_old_signals():
 
 async def run_signal_scan_cycle() -> dict:
     """
-    Run ONE scan cycle and return immediately — no loop, no sleep.
+    Run ONE scan pass and return immediately — no loop, no sleep between
+    passes. Safe to call as often as every minute.
 
-    This is the reusable core used by both:
-    - the in-process background loop (auto_signal_loop), which only runs
-      while the web dyno happens to be awake, and
-    - the standalone Railway Cron entrypoint (backend/cron_scan.py), which
-      runs on its own schedule regardless of whether the web process is
-      idle. The cron path is what guarantees scans actually happen —
-      the in-process loop is just a bonus when the dyno is already up.
+    Whenever the market is open, every pair is checked on every enabled
+    timeframe, but a pair/timeframe is only ANALYZED when a new candle
+    has just closed on it and nobody has claimed that candle yet (see
+    claim_scan_candle). Most passes therefore do nothing but a few clock
+    comparisons and one Redis lookup per pair/timeframe — no market-data
+    or AI calls.
 
-    Safe to call repeatedly within the same session window: session
-    detection (30-min window) plus the 4-hour dedup in
-    signal_already_exists() prevent duplicate signals if this fires
-    more than once while a session is still "active".
+    Used by both the in-process loop (auto_signal_loop, every minute)
+    and the standalone Railway Cron entrypoint (backend/cron_scan.py),
+    which acts as a backup. They can overlap safely: the Redis claim
+    guarantees a candle is analyzed once.
     """
     now = datetime.now(timezone.utc)
 
-    # Keep Redis from ever going idle long enough to be auto-deleted —
-    # runs on every cycle regardless of market state, see redis_heartbeat().
+    # Keep Redis from ever going idle long enough to be auto-deleted.
     redis_heartbeat()
 
     if not is_market_open():
-        print(f"[AutoSignal] 😴 Market closed at {now.strftime('%H:%M UTC')}")
         return {"scanned": False, "reason": "market_closed"}
-
-    active_session = get_active_session(now)
-    if active_session is None:
-        print(f"[AutoSignal] ⏰ No session open at {now.strftime('%H:%M UTC')}")
-        return {"scanned": False, "reason": "no_session"}
-
-    session_name = active_session["name"]
-    print(f"\n[AutoSignal] 🔔 {session_name} detected at {now.strftime('%H:%M UTC')}")
 
     await expire_old_signals()
 
-    pairs_to_scan = get_pairs_for_session(session_name)
-    print(f"[AutoSignal] Scanning {len(pairs_to_scan)} pairs: {', '.join(pairs_to_scan)}")
+    due = []
+    for timeframe in timeframes_for_now(now):
+        boundary = latest_candle_boundary(now, timeframe)
+        age = now - boundary
+        if age < timedelta(seconds=CANDLE_CLOSE_DELAY_SECONDS):
+            continue  # candle only just closed — give the data provider a moment
+        if age > timedelta(minutes=CANDLE_GRACE_MINUTES):
+            continue  # too old to be worth a signal
+        for pair in SCAN_PAIRS:
+            if claim_scan_candle(pair, timeframe, int(boundary.timestamp())):
+                due.append((pair, timeframe, boundary))
+
+    if not due:
+        return {"scanned": False, "reason": "no_new_candles"}
+
+    print(f"\n[AutoSignal] 🔔 {now.strftime('%H:%M UTC')} — "
+          f"{len(due)} newly closed candle(s) to analyze: "
+          + ", ".join(f"{p} {tf}" for p, tf, _ in due))
 
     signals_generated = 0
+    for pair, timeframe, _boundary in due:
+        await asyncio.sleep(2)
+        result = await analyze_pair(pair, timeframe)
+        if result:
+            saved = await save_auto_signal(result)
+            if saved:
+                signals_generated += 1
 
-    # Use M15 during highest liquidity sessions for more opportunities
-    if session_name in ["London/NY Overlap", "New York Open"]:
-        timeframes_to_scan = ["M15", "H1", "H4"]
-        print(f"[AutoSignal] Using M15+H1+H4 (high liquidity session)")
-    else:
-        timeframes_to_scan = SCAN_TIMEFRAMES
-
-    for pair in pairs_to_scan:
-        for timeframe in timeframes_to_scan:
-            await asyncio.sleep(2)
-            result = await analyze_pair(pair, timeframe)
-            if result:
-                saved = await save_auto_signal(result)
-                if saved:
-                    signals_generated += 1
-
-    print(f"[AutoSignal] ✅ {session_name} scan complete — {signals_generated} signals generated")
+    print(f"[AutoSignal] ✅ scan complete — {signals_generated} signals generated")
     return {
         "scanned": True,
-        "session": session_name,
-        "pairs": pairs_to_scan,
+        "analyzed": [f"{p} {tf}" for p, tf, _ in due],
         "signals_generated": signals_generated,
     }
 
 
 async def auto_signal_loop():
     """
-    In-process background loop — a bonus scan path that only runs while
-    the web dyno is awake. Checks every 30 minutes and delegates the
-    actual work to run_signal_scan_cycle(). The Railway Cron job
-    (backend/cron_scan.py) is the reliable path; this loop just adds
-    extra coverage for free when the process happens to be up anyway.
+    In-process background loop. Wakes up every LOOP_CHECK_SECONDS (60s)
+    for as long as the web service is running and delegates to
+    run_signal_scan_cycle(), which only does real work when a candle has
+    just closed. There is no session window and no 30-minute gap: the
+    engine covers the whole market-open period, Sunday 22:00 UTC to
+    Friday 22:00 UTC.
     """
-    print("[AutoSignal] 🚀 In-process Auto Signal loop started (bonus coverage)")
-    print("[AutoSignal] Strategy: Session-based scanning + volatility filter")
-    print(f"[AutoSignal] Sessions: Tokyo(00:00) London(07:00) NewYork(12:00) UTC")
-    print(f"[AutoSignal] Min confidence: {MIN_CONFIDENCE}% | Min R:R: {MIN_RR_RATIO}")
+    print("[AutoSignal] 🚀 Continuous scanner started — analyzes each pair the "
+          "moment a candle closes, whenever the market is open")
+    print(f"[AutoSignal] Pairs: {', '.join(SCAN_PAIRS)} | "
+          f"Min confidence: {MIN_CONFIDENCE}% | Min R:R: {MIN_RR_RATIO}")
 
     await asyncio.sleep(30)
 
-    last_session_scanned = None
-
     while True:
         try:
-            now = datetime.now(timezone.utc)
-            active_session = get_active_session(now)
-            session_name = active_session["name"] if active_session else None
-
-            if session_name and session_name != last_session_scanned:
-                result = await run_signal_scan_cycle()
-                if result.get("scanned"):
-                    last_session_scanned = session_name
-            else:
-                print(f"[AutoSignal] ⏭ Nothing new at {now.strftime('%H:%M UTC')} — checking in 30 mins")
-
+            await run_signal_scan_cycle()
         except Exception as e:
             print(f"[AutoSignal] Loop error: {e}")
 
-        await asyncio.sleep(1800)  # check every 30 minutes
+        await asyncio.sleep(LOOP_CHECK_SECONDS)

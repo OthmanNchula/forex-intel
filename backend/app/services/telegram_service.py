@@ -90,7 +90,7 @@ TP3: {fmt(tp3)}
 
 ⚖️ <b>Risk:Reward:</b> 1:{rr_ratio}
 
-🤖 <b>AI Analysis:</b>
+📊 <b>Analysis:</b>
 {explanation}
 
 ⚠️ <b>Risk Warning:</b>

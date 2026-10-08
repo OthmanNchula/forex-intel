@@ -12,8 +12,8 @@ Deploy as a separate "Cron Job" service in the same Railway project,
 pointed at this same repo/image, with the same environment variables
 as the web service (DATABASE_URL, ANTHROPIC_API_KEY, TWELVE_DATA_API_KEY,
 TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, UPSTASH_REDIS_REST_URL,
-UPSTASH_REDIS_REST_TOKEN, etc). Suggested schedule: every 15 minutes,
-e.g. "*/15 * * * *".
+UPSTASH_REDIS_REST_TOKEN, etc). Suggested schedule: every 5 minutes (backup only —
+the in-process loop already checks every minute), e.g. "*/5 * * * *".
 
 Start command in Railway: python cron_scan.py
 """

@@ -214,7 +214,7 @@ async def send_signal_email(signal_data: dict, pair: str, timeframe: str, db: Se
   <!-- Header -->
   <div style="background:linear-gradient(135deg,#1B2A4A,#0E3460);border-radius:12px;padding:24px;text-align:center;margin-bottom:20px;">
     <h1 style="color:#C9A84C;margin:0;font-size:28px;">⚡ FOREX INTEL</h1>
-    <p style="color:#94a3b8;margin:8px 0 0;">AI Trading Signal Alert</p>
+    <p style="color:#94a3b8;margin:8px 0 0;">Trading Signal Alert</p>
   </div>
 
   <!-- Signal Badge -->
@@ -228,7 +228,7 @@ async def send_signal_email(signal_data: dict, pair: str, timeframe: str, db: Se
   <!-- Confidence -->
   <div style="background:#1e293b;border-radius:12px;padding:16px;margin-bottom:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <span style="color:#94a3b8;font-size:14px;">AI Confidence</span>
+      <span style="color:#94a3b8;font-size:14px;">Setup Score</span>
       <span style="color:{'#22c55e' if confidence >= 70 else '#f59e0b'};font-weight:bold;font-size:16px;">{confidence}%</span>
     </div>
     <div style="background:#374151;border-radius:4px;height:8px;">
@@ -281,7 +281,7 @@ async def send_signal_email(signal_data: dict, pair: str, timeframe: str, db: Se
 
   <!-- AI Analysis -->
   <div style="background:#1e293b;border:1px solid #1d4ed8;border-radius:12px;padding:16px;margin-bottom:16px;">
-    <p style="color:#60a5fa;font-size:14px;font-weight:bold;margin:0 0 8px;">🤖 AI Analysis</p>
+    <p style="color:#60a5fa;font-size:14px;font-weight:bold;margin:0 0 8px;">📊 Analysis</p>
     <p style="color:#cbd5e1;font-size:14px;line-height:1.6;margin:0;">{explanation}</p>
   </div>
 
