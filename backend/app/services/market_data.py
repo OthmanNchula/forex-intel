@@ -58,6 +58,10 @@ async def fetch_ohlcv(
         "outputsize": limit,
         "apikey": settings.TWELVE_DATA_API_KEY,
         "format": "JSON",
+        # Without this Twelve Data returns candle times in the exchange's local
+        # timezone (about UTC+11 for forex), which made the "is this candle
+        # still forming?" check drop the wrong candle and analyse stale data.
+        "timezone": "UTC",
     }
 
     async with httpx.AsyncClient(timeout=15.0) as client:
