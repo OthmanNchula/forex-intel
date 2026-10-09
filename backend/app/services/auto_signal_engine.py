@@ -28,6 +28,10 @@ SCAN_PAIRS = [
     "AUD/USD",
     "USD/CAD",
 ]
+# Optional override from the environment, e.g. SCAN_PAIRS="USD/CAD,GBP/USD"
+_env_pairs = os.getenv("SCAN_PAIRS", "").strip()
+if _env_pairs:
+    SCAN_PAIRS = [p.strip().upper() for p in _env_pairs.split(",") if p.strip()]
 
 SCAN_TIMEFRAMES = ["H1", "H4"]
 SCAN_TIMEFRAMES_OVERLAP = ["M15", "H1", "H4"]
@@ -112,6 +116,10 @@ CANDLE_GRACE_MINUTES = 10
 # and NY open) — it is the most expensive timeframe to scan continuously.
 M15_SCAN_HOURS_UTC = range(12, 17)
 
+# M15 scanning is OFF by default: the backtest has not shown it is worth
+# trading and its first live trades lost. Set SCAN_M15=true to switch it on.
+SCAN_M15 = os.getenv("SCAN_M15", "false").strip().lower() == "true"
+
 # How often the in-process loop wakes up to look for newly closed candles.
 LOOP_CHECK_SECONDS = 60
 
@@ -125,7 +133,7 @@ def latest_candle_boundary(now: datetime, timeframe: str) -> datetime:
 
 def timeframes_for_now(now: datetime) -> list:
     """Timeframes worth scanning right now."""
-    if now.hour in M15_SCAN_HOURS_UTC:
+    if SCAN_M15 and now.hour in M15_SCAN_HOURS_UTC:
         return ["M15", "H1", "H4"]
     return ["H1", "H4"]
 
