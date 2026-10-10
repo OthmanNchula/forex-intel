@@ -1,4 +1,6 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime, timezone
@@ -6,8 +8,9 @@ from app.database import get_db
 from app.models.trade import Trade
 from app.schemas.trade import TradeCreate, TradeUpdate, TradeResponse, TradeStats
 from app.services.alert_service import store_daily_risk
-from app.middleware.auth_middleware import get_current_user
+from app.middleware.auth_middleware import get_current_user, verify_executor_key
 from app.models.user import User
+from app.models.signal import Signal
 
 router = APIRouter(prefix="/api/journal", tags=["Trade Journal"])
 
@@ -254,6 +257,116 @@ def get_trade_stats(
         total_pnl=total_pnl,
         avg_rr=avg_rr,
     )
+
+
+# ---------------------------------------------------------------------------
+# Automatic journal entries from the MT5 executor
+# ---------------------------------------------------------------------------
+class AutoTradeRecord(BaseModel):
+    mt5_ticket: str                  # MT5 position id (= ticket of the opening order)
+    pair: str
+    direction: str                   # BUY or SELL
+    entry_price: float
+    close_price: float
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    lot_size: float
+    risk_amount: Optional[float] = None
+    pnl: float                       # real result from MT5 (profit + commission + swap)
+    close_reason: str                # "STOP LOSS", "TAKE PROFIT", "CLOSED MANUALLY", ...
+    opened_at: datetime
+    closed_at: datetime
+
+
+def _journal_owner(db: Session) -> User:
+    """The user whose journal receives auto-executed trades.
+    Set JOURNAL_OWNER_EMAIL in Railway; if unset and there is exactly one
+    user, that user is used."""
+    email = os.getenv("JOURNAL_OWNER_EMAIL", "").strip().lower()
+    if email:
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            raise HTTPException(status_code=400, detail="JOURNAL_OWNER_EMAIL does not match any user.")
+        return user
+    users = db.query(User).limit(2).all()
+    if len(users) == 1:
+        return users[0]
+    raise HTTPException(status_code=400, detail="Set JOURNAL_OWNER_EMAIL so auto-trades know whose journal to go in.")
+
+
+@router.post("/auto-record", status_code=201)
+def auto_record_trade(
+    payload: AutoTradeRecord,
+    _: None = Depends(verify_executor_key),
+    db: Session = Depends(get_db),
+):
+    """
+    Called by the VPS executor when one of its trades closes (stop loss,
+    take profit, or manual close). Creates a CLOSED journal entry with the
+    real MT5 result. Safe to call twice for the same ticket: the second
+    call is ignored. Does not change the app's account_balance setting.
+    """
+    owner = _journal_owner(db)
+    # Ends with "." so ticket 100 never matches ticket 1000 in the lookup.
+    tag = f"MT5 ticket {payload.mt5_ticket}."
+
+    existing = db.query(Trade).filter(
+        Trade.user_id == owner.id,
+        Trade.user_notes.like(f"%{tag}%"),
+    ).first()
+    if existing:
+        return {"message": "already recorded", "trade_id": str(existing.id), "duplicate": True}
+
+    pair = payload.pair.strip().upper().replace("-", "/")
+    direction = payload.direction.strip().upper()
+
+    # Link back to the signal that produced the trade (the executor reported
+    # the opening order ticket as the signal's mt5_ticket).
+    signal = db.query(Signal).filter(Signal.mt5_ticket == str(payload.mt5_ticket)).first()
+    stop_loss = payload.stop_loss if payload.stop_loss else (signal.stop_loss if signal else None)
+    take_profit = payload.take_profit if payload.take_profit else (
+        (signal.take_profit_2 or signal.take_profit_1) if signal else None)
+
+    pip = PIP_SIZES.get(pair, 0.0001)
+    signed = (payload.close_price - payload.entry_price) * (1 if direction == "BUY" else -1)
+    pnl_pips = round(signed / pip, 1)
+
+    if payload.pnl > 0.005:
+        result = "WIN"
+    elif payload.pnl < -0.005:
+        result = "LOSS"
+    else:
+        result = "BREAKEVEN"
+
+    timeframe = signal.timeframe if signal else "?"
+    notes = (f"[AUTO] {timeframe} · closed by {payload.close_reason}"
+             + (f" · score {signal.confidence_score}" if signal and signal.confidence_score else "")
+             + f" · {tag}")
+
+    trade = Trade(
+        user_id=owner.id,
+        signal_id=signal.id if signal else None,
+        pair=pair,
+        direction=direction,
+        entry_price=payload.entry_price,
+        stop_loss=stop_loss if stop_loss is not None else payload.entry_price,
+        take_profit=take_profit if take_profit is not None else payload.entry_price,
+        lot_size=payload.lot_size,
+        risk_amount=round(payload.risk_amount or 0.0, 2),
+        result=result,
+        close_price=payload.close_price,
+        pnl=round(payload.pnl, 2),
+        pnl_pips=pnl_pips,
+        opened_at=payload.opened_at,
+        closed_at=payload.closed_at,
+        ai_reason=signal.ai_explanation if signal else None,
+        user_notes=notes,
+    )
+    db.add(trade)
+    db.commit()
+    db.refresh(trade)
+    print(f"[Journal] Auto-recorded {pair} {direction} {result} {payload.pnl:+.2f} (MT5 ticket {payload.mt5_ticket}, {payload.close_reason})")
+    return {"message": "recorded", "trade_id": str(trade.id), "duplicate": False}
 
 
 @router.get("/{trade_id}", response_model=TradeResponse)
