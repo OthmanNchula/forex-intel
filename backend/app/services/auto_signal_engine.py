@@ -59,8 +59,18 @@ SIGNAL_EXPIRY_HOURS = {
 DEFAULT_SIGNAL_EXPIRY_HOURS = 4  # fallback for any timeframe not listed above
 
 
+# A signal is only actionable right after its candle closes: once price has
+# moved on, the entry zone is stale. So every signal (any timeframe, auto or
+# manual) is active for SIGNAL_ACTIVE_MINUTES only, then expires.
+# Set SIGNAL_ACTIVE_MINUTES=0 in Railway to go back to the per-timeframe
+# hours above.
+SIGNAL_ACTIVE_MINUTES = float(os.getenv("SIGNAL_ACTIVE_MINUTES", "5"))
+
+
 def get_signal_expiry_hours(timeframe: str) -> float:
     """How many hours a signal generated on this timeframe should stay active."""
+    if SIGNAL_ACTIVE_MINUTES > 0:
+        return SIGNAL_ACTIVE_MINUTES / 60.0
     return SIGNAL_EXPIRY_HOURS.get(timeframe, DEFAULT_SIGNAL_EXPIRY_HOURS)
 
 # There is deliberately NO per-pair/timeframe cooldown here anymore (it
@@ -597,10 +607,12 @@ async def run_signal_scan_cycle() -> dict:
     # Keep Redis from ever going idle long enough to be auto-deleted.
     redis_heartbeat()
 
+    # Expire first, every minute, even when the market is closed — otherwise
+    # Friday's last signals would stay "active" all weekend.
+    await expire_old_signals()
+
     if not is_market_open():
         return {"scanned": False, "reason": "market_closed"}
-
-    await expire_old_signals()
 
     due = []
     for timeframe in timeframes_for_now(now):

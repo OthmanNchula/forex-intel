@@ -148,9 +148,13 @@ def get_active_signals(
     db: Session = Depends(get_db),
 ):
     """Get all currently active signals."""
+    now = datetime.now(timezone.utc)
     signals = db.query(Signal).filter(
         Signal.is_active == True,
         Signal.direction != "NO_TRADE",
+        # Hide anything past its expiry even if the minute-by-minute sweep
+        # hasn't flagged it yet.
+        (Signal.expires_at.is_(None)) | (Signal.expires_at > now),
     ).order_by(Signal.created_at.desc()).limit(20).all()
 
     return [SignalResponse.model_validate(s) for s in signals]
@@ -192,12 +196,14 @@ def get_executable_signals(
     signals = db.query(Signal).filter(
         Signal.is_active == True,
         Signal.direction != "NO_TRADE",
+        (Signal.expires_at.is_(None)) | (Signal.expires_at > datetime.now(timezone.utc)),
         Signal.auto_executed == False,
         Signal.confidence_score >= EXECUTOR_MIN_CONFIDENCE,
         Signal.rr_ratio >= EXECUTOR_MIN_RR_RATIO,
     ).order_by(Signal.created_at.asc()).limit(20).all()
 
     return [SignalResponse.model_validate(s) for s in signals]
+
 
 # --- End-to-end execution test --------------------------------------------
 #
@@ -285,6 +291,7 @@ async def create_test_signal(
     db.refresh(signal)
 
     return SignalResponse.model_validate(signal)
+
 
 @router.get("/signals/{signal_id}", response_model=SignalResponse)
 def get_signal(
