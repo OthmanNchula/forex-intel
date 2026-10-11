@@ -19,7 +19,42 @@ from app.services.auto_signal_engine import (
     DAILY_AI_CALL_BUDGET,
     MONTHLY_AI_CALL_BUDGET,
     get_signal_expiry_hours,
+    drop_forming_candle,
+    get_higher_timeframe_cross,
+    has_volatility_spike,
 )
+from app.services import rules_engine
+import os
+
+# Signals made with the "Generate Signal" button are for looking at, not
+# for the robot: they are NOT auto-traded unless this is set to true.
+MANUAL_SIGNALS_AUTO_TRADE = os.getenv("MANUAL_SIGNALS_AUTO_TRADE", "false").strip().lower() == "true"
+
+
+def rules_signal_for(pair: str, timeframe: str, indicators: dict, htf_cross) -> dict:
+    """Same free rules engine the automatic scanner uses. Always returns a
+    signal-shaped dict; a stand-aside comes back as direction NO_TRADE with
+    the reason in ai_explanation."""
+    if not has_volatility_spike(indicators, pair, timeframe):
+        decision = {"action": "STAND_ASIDE", "regime": "QUIET", "reason": "market too quiet (low volatility)"}
+    else:
+        decision = rules_engine.evaluate(pair, timeframe, indicators, htf_cross)
+    if decision["action"] == "TRADE":
+        return decision["signal"]
+    return {
+        "direction": "NO_TRADE",
+        "current_price": indicators.get("current_price"),
+        "confidence_score": decision.get("score", 0),
+        "rr_ratio": None,
+        "ai_explanation": (f"[RULES-BASED — no AI] Stand aside on {pair} {timeframe} "
+                           f"[{decision.get('regime', '')}]: {decision['reason']}."),
+        "risk_warning": "No trade: the rules found no valid setup on the last closed candle.",
+        "ema20": indicators.get("ema20"),
+        "ema50": indicators.get("ema50"),
+        "rsi": indicators.get("rsi"),
+        "macd_hist": indicators.get("macd_hist"),
+        "atr": indicators.get("atr"),
+    }
 from app.middleware.auth_middleware import get_current_user, verify_executor_key
 from app.models.user import User
 
@@ -74,16 +109,18 @@ async def generate_signal(
             detail=f"Could not fetch market data for {pair}. Check the pair name."
         )
 
-    # Step 2: Compute indicators
-    indicators = compute_all_indicators(df)
+    # Step 2: Compute indicators on CLOSED candles only
+    df = drop_forming_candle(df, timeframe)
+    indicators = compute_all_indicators(df, include_chart=False)
     if not indicators:
         raise HTTPException(
             status_code=422,
             detail="Not enough historical data to compute indicators."
         )
 
-    # Step 3: Generate AI signal
-    ai_result = await generate_ai_signal(pair, timeframe, indicators, df)
+    # Step 3: Rules engine (free — no AI call)
+    htf_cross = await get_higher_timeframe_cross(pair, timeframe)
+    ai_result = rules_signal_for(pair, timeframe, indicators, htf_cross)
 
     # Step 4: Save signal to database
     signal = Signal(
@@ -108,6 +145,10 @@ async def generate_signal(
         atr=ai_result.get("atr"),
         expires_at=datetime.now(timezone.utc) + timedelta(hours=get_signal_expiry_hours(timeframe)),
     )
+    if not MANUAL_SIGNALS_AUTO_TRADE:
+        # Keep the executor away from button-generated signals.
+        signal.auto_executed = True
+        signal.execution_note = "manual signal (Generate Signal button) — not auto-traded"
     db.add(signal)
     db.commit()
     db.refresh(signal)
