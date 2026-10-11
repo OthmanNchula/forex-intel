@@ -234,6 +234,13 @@ def get_executable_signals(
     twice: once handled (filled OR deliberately skipped), the executor
     calls /signals/{id}/mark-executed, which excludes it here for good.
     """
+    # Every poll is also the executor's heartbeat (see executor_watchdog).
+    try:
+        from app.services.executor_watchdog import record_executor_poll
+        record_executor_poll()
+    except Exception as e:
+        print(f"[Watchdog] heartbeat record failed: {e}")
+
     signals = db.query(Signal).filter(
         Signal.is_active == True,
         Signal.direction != "NO_TRADE",

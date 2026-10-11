@@ -677,4 +677,10 @@ async def auto_signal_loop():
         except Exception as e:
             print(f"[AutoSignal] Loop error: {e}")
 
+        try:
+            from app.services.executor_watchdog import check_executor_alive
+            await check_executor_alive()
+        except Exception as e:
+            print(f"[Watchdog] check failed: {e}")
+
         await asyncio.sleep(LOOP_CHECK_SECONDS)
