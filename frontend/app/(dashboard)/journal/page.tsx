@@ -14,6 +14,7 @@ import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { useStore } from "@/store/useStore";
 import { saveAuth, getToken } from "@/lib/auth";
 import { StatCard } from "@/components/ui/stat-card";
+import ExportJournalButton from "@/components/journal/ExportJournalButton";
 
 const PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD", "AUD/USD", "USD/CAD"];
 
@@ -112,6 +113,7 @@ export default function JournalPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <ExportJournalButton />
           <button
             onClick={async () => {
               if (
@@ -132,6 +134,7 @@ export default function JournalPage() {
             <Trash2 className="h-3.5 w-3.5" />
             Clear All Trades
           </button>
+          
           <button
             onClick={async () => {
               const input = prompt(

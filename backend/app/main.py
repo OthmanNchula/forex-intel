@@ -7,6 +7,7 @@ from app.config import settings
 from app.database import engine, Base
 from app.routers import auth, market, analysis, risk, journal, alerts, invites
 from app.websocket.price_feed import handle_price_websocket, price_broadcast_loop
+from app.routers import auth, market, analysis, risk, journal, alerts, invites, journal_export
 
 
 def create_tables():
@@ -62,6 +63,7 @@ app.include_router(market.router)
 app.include_router(analysis.router)
 app.include_router(risk.router)
 app.include_router(journal.router)
+app.include_router(journal_export.router)
 app.include_router(alerts.router)
 app.include_router(invites.router)
 
