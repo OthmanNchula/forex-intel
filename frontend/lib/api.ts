@@ -102,4 +102,9 @@ export const alertsApi = {
   deleteAlert: (id: string) => api.delete(`/api/alerts/${id}`),
 };
 
+
 export default api;
+
+export const invitesApi = {
+  sendInvite: (email: string) => api.post("/api/invites/send", { email }),
+};
