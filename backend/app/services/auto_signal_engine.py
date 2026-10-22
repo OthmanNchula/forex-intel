@@ -34,6 +34,21 @@ if _env_pairs:
     SCAN_PAIRS = [p.strip().upper() for p in _env_pairs.split(",") if p.strip()]
 
 SCAN_TIMEFRAMES = ["H1", "H4"]
+
+# Pair/timeframe combinations that are NOT scanned (so never auto-traded),
+# because backtest_rules.py showed no edge there. Format "PAIR:TF".
+# GBP/USD H1 lost money in the Oct 2026 backtest (-0.06R x48) while
+# GBP/USD H4 made money (+0.24R x73), so only H1 is switched off.
+# Override on Railway with SKIP_PAIR_TIMEFRAMES="GBP/USD:H1,EUR/USD:H4";
+# set it to "none" to scan every combination again.
+_DEFAULT_SKIP = "GBP/USD:H1"
+_env_skip = os.getenv("SKIP_PAIR_TIMEFRAMES", _DEFAULT_SKIP).strip()
+SKIP_PAIR_TIMEFRAMES = set()
+if _env_skip.lower() != "none":
+    for item in _env_skip.split(","):
+        if ":" in item:
+            _p, _tf = item.split(":", 1)
+            SKIP_PAIR_TIMEFRAMES.add((_p.strip().upper(), _tf.strip().upper()))
 SCAN_TIMEFRAMES_OVERLAP = ["M15", "H1", "H4"]
 
 # Minimum thresholds
@@ -623,6 +638,8 @@ async def run_signal_scan_cycle() -> dict:
         if age > timedelta(minutes=CANDLE_GRACE_MINUTES):
             continue  # too old to be worth a signal
         for pair in SCAN_PAIRS:
+            if (pair, timeframe) in SKIP_PAIR_TIMEFRAMES:
+                continue  # no backtested edge on this pair/timeframe
             if claim_scan_candle(pair, timeframe, int(boundary.timestamp())):
                 due.append((pair, timeframe, boundary))
 
@@ -668,6 +685,9 @@ async def auto_signal_loop():
           "moment a candle closes, whenever the market is open")
     print(f"[AutoSignal] Pairs: {', '.join(SCAN_PAIRS)} | "
           f"Min confidence: {MIN_CONFIDENCE}% | Min R:R: {MIN_RR_RATIO}")
+    if SKIP_PAIR_TIMEFRAMES:
+        print("[AutoSignal] Skipped (no backtested edge): "
+              + ", ".join(f"{p} {tf}" for p, tf in sorted(SKIP_PAIR_TIMEFRAMES)))
 
     await asyncio.sleep(30)
 
