@@ -1,6 +1,11 @@
 """
-Backtest the rules engine on historical candles — with and without the
-sideways-market filter — so the thresholds can be judged by numbers.
+Backtest the rules engine on historical candles in three modes so the
+thresholds can be judged by numbers:
+  * filter OFF   — no sideways-market filter
+  * filter ON    — the current live setup
+  * ON+pattern   — plus the Candlestick Trading Bible entry gate
+A per-pattern table shows which candle patterns earn and which lose, so
+losers can be switched off in candle_patterns.ENABLED_PATTERNS.
 
 Run from the backend folder (needs TWELVE_DATA_API_KEY in the environment
 or in .env):
@@ -63,7 +68,8 @@ def default_spread(pair: str) -> float:
     return 0.02 if "JPY" in pair else 0.00020
 
 
-def simulate(df: pd.DataFrame, pair: str, timeframe: str, htf_df, use_regime_filter: bool):
+def simulate(df: pd.DataFrame, pair: str, timeframe: str, htf_df, use_regime_filter: bool,
+             use_pattern_gate: bool = False):
     """Walk forward through df; return a list of per-trade results in R."""
     spread = default_spread(pair)
     tf_delta = pd.Timedelta(minutes=TF_MINUTES[timeframe])
@@ -100,7 +106,8 @@ def simulate(df: pd.DataFrame, pair: str, timeframe: str, htf_df, use_regime_fil
             if pos >= 0:
                 htf_cross = str(htf_state[pos])
 
-        decision = rules_engine.evaluate(pair, timeframe, ind, htf_cross, use_regime_filter)
+        decision = rules_engine.evaluate(pair, timeframe, ind, htf_cross, use_regime_filter,
+                                         use_pattern_gate)
         if decision["action"] != "TRADE":
             i += 1
             continue
@@ -132,7 +139,7 @@ def simulate(df: pd.DataFrame, pair: str, timeframe: str, htf_df, use_regime_fil
         outcome_r -= spread / risk              # spread cost in R
         results.append({"time": index[i], "direction": direction,
                         "regime": decision["regime"], "score": decision["score"],
-                        "r": outcome_r})
+                        "pattern": decision.get("pattern"), "r": outcome_r})
         i = exit_i + 1                          # one trade at a time
     return results
 
@@ -247,8 +254,9 @@ async def main():
                 print(f"{pair} {tf}: not enough data, skipped")
                 continue
             print(f"Backtesting {pair} {tf} on {len(df)} candles ...", flush=True)
-            for label, flag in (("filter ON ", True), ("filter OFF", False)):
-                res = simulate(df, pair, tf, htf, flag)
+            for label, flag, gate in (("filter ON ", True, False), ("filter OFF", False, False),
+                                      ("ON+pattern", True, True)):
+                res = simulate(df, pair, tf, htf, flag, gate)
                 rows.append((pair, tf, label, summarize(res)))
                 totals.setdefault((tf, label), []).extend(res)
 
@@ -262,11 +270,31 @@ async def main():
         print(f"ALL {tf}, regime {label}: {s['trades']} trades, win {s['win%']}%, avg {s['avg_R']}R, "
               f"total {s['total_R']}R, worst drawdown {s['max_DD_R']}R")
 
-    # Verdict per pair, using the live setting (regime filter ON)
-    print("\nVERDICT (regime filter ON, as traded live):")
+    # Per candle pattern, from the ON+pattern runs
+    by_pattern = {}
+    for (tf, label), res in totals.items():
+        if label == "ON+pattern":
+            for t in res:
+                by_pattern.setdefault(t.get("pattern") or "?", []).append(t)
+    if by_pattern:
+        print("\nPer candle pattern (ON+pattern, all pairs/timeframes):")
+        for name, res in sorted(by_pattern.items()):
+            s = summarize(res)
+            print(f"  {name:22} {s['trades']:>4} trades, win {s['win%']:>5}%, avg {s['avg_R']:>6}R")
+        print("  -> switch off any pattern with negative avg R in candle_patterns.ENABLED_PATTERNS")
+
+    for mode_label, mode_key in (("regime filter ON, as traded live", "filter ON"),
+                                 ("ON+pattern, candlestick gate", "ON+pattern")):
+        _print_verdict(rows, mode_label, mode_key)
+    print("\nBreak-even win rate for a 2:1 trade is about 33%; costs push it slightly higher.")
+    print("Past results do not guarantee future results.")
+
+
+def _print_verdict(rows, mode_label, mode_key):
+    print(f"\nVERDICT ({mode_label}):")
     by_pair = {}
     for pair, tf, label, s in rows:
-        if label.strip() == "filter ON":
+        if label.strip() == mode_key:
             by_pair.setdefault(pair, {})[tf] = s
     for pair, per_tf in by_pair.items():
         enough = all(s["trades"] >= MIN_TRADES_FOR_VERDICT for s in per_tf.values())
@@ -281,8 +309,6 @@ async def main():
         if not enough:
             verdict += f" (fewer than {MIN_TRADES_FOR_VERDICT} trades somewhere: low confidence)"
         print(f"  {pair:8} {verdict}   [{detail}]")
-    print("\nBreak-even win rate for a 2:1 trade is about 33%; costs push it slightly higher.")
-    print("Past results do not guarantee future results.")
 
 
 if __name__ == "__main__":
