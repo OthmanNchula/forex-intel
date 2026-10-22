@@ -125,6 +125,26 @@ def detect_support_resistance(
     }
 
 
+def detect_swing_levels(df: pd.DataFrame, side: int = 3, lookback: int = 150) -> list:
+    """
+    All confirmed swing highs and lows in the last `lookback` candles.
+    A swing needs `side` candles on each side, so only candles that have
+    already been confirmed are used (no look-ahead). Used by the
+    candlestick pattern gate to check the pattern formed at a level.
+    """
+    highs = df["high"].values
+    lows = df["low"].values
+    n = len(df)
+    start = max(side, n - lookback)
+    levels = []
+    for i in range(start, n - side):
+        if highs[i] == highs[i - side: i + side + 1].max():
+            levels.append(round(float(highs[i]), 5))
+        if lows[i] == lows[i - side: i + side + 1].min():
+            levels.append(round(float(lows[i]), 5))
+    return levels
+
+
 def get_trend_label(ema20: float, ema50: float, rsi: float) -> str:
     """Return a simple trend label."""
     if ema20 > ema50 and rsi > 50:
@@ -245,6 +265,12 @@ def compute_all_indicators(df: pd.DataFrame, include_chart: bool = True) -> Opti
         "nearest_resistance": nearest_resistance,
         "support_levels": sr_zones["support"],
         "resistance_levels": sr_zones["resistance"],
+        # Candlestick pattern gate inputs (last 3 closed candles, oldest first)
+        "recent_candles": [
+            {k: round(float(df[k].iloc[i]), 5) for k in ("open", "high", "low", "close")}
+            for i in range(-3, 0)
+        ],
+        "swing_levels": detect_swing_levels(df),
         # Chart series
         "chart_data": chart_data,
     }
