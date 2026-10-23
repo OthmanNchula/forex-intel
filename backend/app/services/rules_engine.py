@@ -203,6 +203,7 @@ def evaluate(
     htf_cross: Optional[str] = None,
     use_regime_filter: bool = True,
     use_pattern_gate: Optional[bool] = None,
+    sl_atr: Optional[float] = None,
 ) -> dict:
     """
     Full decision for one closed candle. Always returns a dict:
@@ -217,6 +218,11 @@ def evaluate(
     """
     if use_pattern_gate is None:
         use_pattern_gate = USE_PATTERN_GATE
+    # Stop size in ATR. Per-pair profiles may widen it (e.g. gold); the
+    # targets scale with it so the reward stays exactly 2x the risk.
+    sl = SL_ATR if sl_atr is None else float(sl_atr)
+    scale = sl / SL_ATR
+    tp1, tp2, tp3 = TP1_ATR * scale, TP2_ATR * scale, TP3_ATR * scale
     regime, regime_reasons = classify_regime(ind)
     regime_text = ", ".join(regime_reasons)
 
@@ -239,7 +245,7 @@ def evaluate(
 
     pattern = None
     if use_pattern_gate:
-        passed, why, pattern = candle_patterns.check_pattern_gate(ind, direction, SL_ATR)
+        passed, why, pattern = candle_patterns.check_pattern_gate(ind, direction, sl)
         if not passed:
             return {"action": "STAND_ASIDE", "regime": regime, "score": score,
                     "pattern": pattern, "reason": f"no candle entry — {why}"}
@@ -260,16 +266,16 @@ def evaluate(
         "current_price": price,
         "entry_low": round(price - atr * 0.1, 5),
         "entry_high": round(price + atr * 0.1, 5),
-        "stop_loss": round(price - sign * atr * SL_ATR, 5),
-        "take_profit_1": round(price + sign * atr * TP1_ATR, 5),
-        "take_profit_2": round(price + sign * atr * TP2_ATR, 5),
-        "take_profit_3": round(price + sign * atr * TP3_ATR, 5),
+        "stop_loss": round(price - sign * atr * sl, 5),
+        "take_profit_1": round(price + sign * atr * tp1, 5),
+        "take_profit_2": round(price + sign * atr * tp2, 5),
+        "take_profit_3": round(price + sign * atr * tp3, 5),
         "rr_ratio": FIXED_RR,
         "confidence_score": score,
         "ai_explanation": (
             f"[RULES-BASED — no AI] {direction} on {pair} {timeframe}. Market regime: "
             f"{regime} ({regime_text}). Setup score {score}/100: " + "; ".join(notes) + ". "
-            f"Stop {SL_ATR}x ATR, target {TP2_ATR}x ATR (fixed 2:1)."
+            f"Stop {sl:g}x ATR, target {tp2:g}x ATR (fixed 2:1)."
         ),
         "pattern": pattern,
         "risk_warning": (
@@ -285,4 +291,4 @@ def evaluate(
         "atr": atr,
     }
     return {"action": "TRADE", "regime": regime, "score": score,
-            "pattern": pattern, "signal": signal}
+            "pattern": pattern, "playbook": "trend", "signal": signal}

@@ -8,6 +8,7 @@ from app.models.signal import Signal
 from app.services.market_data import fetch_ohlcv
 from app.services.indicator_engine import compute_all_indicators
 from app.services import rules_engine
+from app.services import pair_profiles
 from app.services.alert_service import (
     cache_signal,
     is_within_ai_call_budget,
@@ -32,6 +33,16 @@ SCAN_PAIRS = [
 _env_pairs = os.getenv("SCAN_PAIRS", "").strip()
 if _env_pairs:
     SCAN_PAIRS = [p.strip().upper() for p in _env_pairs.split(",") if p.strip()]
+
+# Per-pair profiles (see pair_profiles.py). When USE_PAIR_PROFILES=true and
+# app/pair_profiles.json has approved combinations, ONLY those pair/timeframe
+# combinations are scanned, each with its own playbooks, stop and sessions.
+PROFILES_ACTIVE = pair_profiles.USE_PAIR_PROFILES and bool(pair_profiles.APPROVED)
+if PROFILES_ACTIVE:
+    SCAN_PAIRS = pair_profiles.approved_pairs()
+elif pair_profiles.USE_PAIR_PROFILES:
+    print("[Profiles] ⚠️ USE_PAIR_PROFILES=true but app/pair_profiles.json has no approved "
+          "profiles — falling back to the standard rules")
 
 SCAN_TIMEFRAMES = ["H1", "H4"]
 
@@ -451,12 +462,25 @@ async def analyze_pair(pair: str, timeframe: str) -> Optional[dict]:
             print(f"[AutoSignal] {pair} {timeframe} — not enough candles, will retry shortly")
             return DATA_UNAVAILABLE
 
-        if not has_volatility_spike(indicators, pair, timeframe):
-            print(f"[AutoSignal] {pair} {timeframe} ({candle_tag}) — stand aside: market too quiet")
-            return None
+        profile = pair_profiles.approved_profile(pair, timeframe) if PROFILES_ACTIVE else None
+        if profile is not None:
+            htf_cross = await get_higher_timeframe_cross(pair, timeframe)
+            close_time = df.index[-1].to_pydatetime() + timedelta(minutes=TIMEFRAME_MINUTES[timeframe])
+            decision = pair_profiles.evaluate_with_profile(
+                pair, timeframe, indicators, htf_cross, profile, close_time)
+            # The quiet-market filter only applies to trend trades: range
+            # trades are meant for calm, sideways markets.
+            if (decision["action"] == "TRADE" and decision.get("playbook") == "trend"
+                    and not has_volatility_spike(indicators, pair, timeframe)):
+                print(f"[AutoSignal] {pair} {timeframe} ({candle_tag}) — stand aside: market too quiet")
+                return None
+        else:
+            if not has_volatility_spike(indicators, pair, timeframe):
+                print(f"[AutoSignal] {pair} {timeframe} ({candle_tag}) — stand aside: market too quiet")
+                return None
 
-        htf_cross = await get_higher_timeframe_cross(pair, timeframe)
-        decision = rules_engine.evaluate(pair, timeframe, indicators, htf_cross)
+            htf_cross = await get_higher_timeframe_cross(pair, timeframe)
+            decision = rules_engine.evaluate(pair, timeframe, indicators, htf_cross)
 
         if decision["action"] != "TRADE":
             print(f"[AutoSignal] {pair} {timeframe} ({candle_tag}) — stand aside "
@@ -465,7 +489,8 @@ async def analyze_pair(pair: str, timeframe: str) -> Optional[dict]:
 
         signal = decision["signal"]
         print(f"[AutoSignal] ✅ RULES SIGNAL: {pair} {timeframe} ({candle_tag}) {signal['direction']} | "
-              f"score {decision['score']} | regime {decision['regime']} | R:R {signal['rr_ratio']}")
+              f"score {decision['score']} | regime {decision['regime']} | "
+              f"playbook {decision.get('playbook', 'trend')} | R:R {signal['rr_ratio']}")
         return {
             "pair": pair,
             "timeframe": timeframe,
@@ -640,6 +665,8 @@ async def run_signal_scan_cycle() -> dict:
         for pair in SCAN_PAIRS:
             if (pair, timeframe) in SKIP_PAIR_TIMEFRAMES:
                 continue  # no backtested edge on this pair/timeframe
+            if PROFILES_ACTIVE and pair_profiles.approved_profile(pair, timeframe) is None:
+                continue  # profile not approved by the backtest for this timeframe
             if claim_scan_candle(pair, timeframe, int(boundary.timestamp())):
                 due.append((pair, timeframe, boundary))
 
@@ -685,6 +712,11 @@ async def auto_signal_loop():
           "moment a candle closes, whenever the market is open")
     print(f"[AutoSignal] Pairs: {', '.join(SCAN_PAIRS)} | "
           f"Min confidence: {MIN_CONFIDENCE}% | Min R:R: {MIN_RR_RATIO}")
+    if PROFILES_ACTIVE:
+        for p in SCAN_PAIRS:
+            for tf, prof in pair_profiles.APPROVED[p].items():
+                print(f"[Profiles] {p} {tf}: {'+'.join(prof['playbooks'])}, stop {prof['sl_atr']} ATR, "
+                      f"sessions {', '.join(prof['sessions']) if prof.get('sessions') else 'all'}")
     if SKIP_PAIR_TIMEFRAMES:
         print("[AutoSignal] Skipped (no backtested edge): "
               + ", ".join(f"{p} {tf}" for p, tf in sorted(SKIP_PAIR_TIMEFRAMES)))

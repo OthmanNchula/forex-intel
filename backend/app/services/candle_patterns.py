@@ -94,8 +94,10 @@ def _inside_bar_breakout(c3, direction):
     return c["c"] > mother["h"] if direction == "BUY" else c["c"] < mother["l"]
 
 
-def find_pattern(ind: dict, direction: str) -> Optional[str]:
-    """Name of the first enabled pattern found on the last closed candle, or None."""
+def find_pattern(ind: dict, direction: str, allowed: Optional[set] = None) -> Optional[str]:
+    """Name of the first enabled pattern found on the last closed candle, or None.
+    `allowed` restricts the search further (the range playbook uses it)."""
+    enabled = ENABLED_PATTERNS if allowed is None else (ENABLED_PATTERNS & allowed)
     raw = ind.get("recent_candles") or []
     if len(raw) < 3:
         return None
@@ -110,7 +112,7 @@ def find_pattern(ind: dict, direction: str) -> Optional[str]:
         ("Inside bar breakout", lambda: _inside_bar_breakout(c3, direction)),
     ]
     for name, fn in checks:
-        if name in ENABLED_PATTERNS and fn():
+        if name in enabled and fn():
             return name
     return None
 

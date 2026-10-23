@@ -271,6 +271,11 @@ def compute_all_indicators(df: pd.DataFrame, include_chart: bool = True) -> Opti
             for i in range(-3, 0)
         ],
         "swing_levels": detect_swing_levels(df),
+        # Range playbook inputs: the 40-candle box and recent RSI extremes
+        "range_high_40": round(float(df["high"].iloc[-40:].max()), 5),
+        "range_low_40": round(float(df["low"].iloc[-40:].min()), 5),
+        "rsi_min_3": round(float(rsi.iloc[-3:].min()), 2),
+        "rsi_max_3": round(float(rsi.iloc[-3:].max()), 2),
         # Chart series
         "chart_data": chart_data,
     }
