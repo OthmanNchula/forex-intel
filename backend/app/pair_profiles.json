@@ -1,0 +1,95 @@
+{
+  "generated": "2026-10-23 08:41 UTC",
+  "note": "Written by backtest_profiles.py. Only approved pair/timeframes are listed; only these trade when USE_PAIR_PROFILES=true.",
+  "profiles": {
+    "USD/CAD": {
+      "H1": {
+        "playbooks": [
+          "trend"
+        ],
+        "sl_atr": 1.5,
+        "sessions": null,
+        "chosen": "baseline (live rules)",
+        "train": {
+          "trades": 52,
+          "win%": 42.3,
+          "avg_R": 0.097,
+          "max_DD_R": 6.8
+        },
+        "test": {
+          "trades": 42,
+          "win%": 50.0,
+          "avg_R": 0.319,
+          "max_DD_R": 11.1
+        }
+      },
+      "H4": {
+        "playbooks": [
+          "trend"
+        ],
+        "sl_atr": 1.5,
+        "sessions": null,
+        "chosen": "baseline (live rules)",
+        "train": {
+          "trades": 79,
+          "win%": 43.0,
+          "avg_R": 0.232,
+          "max_DD_R": 6.9
+        },
+        "test": {
+          "trades": 47,
+          "win%": 42.6,
+          "avg_R": 0.248,
+          "max_DD_R": 7.8
+        }
+      }
+    },
+    "GBP/USD": {
+      "H4": {
+        "playbooks": [
+          "range"
+        ],
+        "sl_atr": 1.5,
+        "sessions": null,
+        "chosen": "range, all hours",
+        "train": {
+          "trades": 31,
+          "win%": 41.9,
+          "avg_R": 0.214,
+          "max_DD_R": 3.3
+        },
+        "test": {
+          "trades": 18,
+          "win%": 38.9,
+          "avg_R": 0.12,
+          "max_DD_R": 6.5
+        }
+      }
+    },
+    "USD/JPY": {
+      "H1": {
+        "playbooks": [
+          "range"
+        ],
+        "sl_atr": 1.5,
+        "sessions": [
+          "asia",
+          "newyork"
+        ],
+        "chosen": "range, designed sessions",
+        "train": {
+          "trades": 18,
+          "win%": 38.9,
+          "avg_R": 0.023,
+          "max_DD_R": 5.4
+        },
+        "test": {
+          "trades": 13,
+          "win%": 46.2,
+          "avg_R": 0.303,
+          "max_DD_R": 3.2
+        }
+      }
+    }
+  }
+}
